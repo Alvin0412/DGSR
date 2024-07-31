@@ -11,7 +11,7 @@ This is the code for the TKDE 2022 Paper: [Dynamic Graph Neural Networks for Seq
 You need to run the file ```new_data.py``` to generate the data format needed for our model. The detailed commands 
 can be found in ```load_{dataset}.sh```
 
-You need to run the file ```generate_neg.py``` to generate data to speed up the test. You can set the 
+You need to run the file ```generate_neg.py``` to generate necessary negative samples. You can set the 
 data set in the file.
 
 ### Training and Testing 

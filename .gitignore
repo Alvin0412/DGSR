@@ -1,1 +1,15 @@
 .idea/
+# Ignore all files in the Data folder that end with _graph
+/Data/*_graph
+
+# Ignore all files in the root directory that end with _neg
+/*_neg
+
+# Ignore the Newdata folder
+Newdata/**
+
+# Ignore the __pycache__ folder
+__pycache__/
+
+# Ignore the debug_purpose.py file
+debug_purpose.py

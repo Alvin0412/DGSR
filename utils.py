@@ -13,16 +13,19 @@ import numpy as np
 import pandas as pd
 
 
-
 def pickle_loader(path):
     a = cPickle.load(open(path, 'rb'))
     return a
 
+
 def user_neg(data, item_num):
     item = range(item_num)
+
     def select(data_u, item):
         return np.setdiff1d(item, data_u)
+
     return data.groupby('user_id')['item_id'].apply(lambda x: select(x, item))
+
 
 def neg_generate(user, data_neg, neg_num=100):
     neg = np.zeros((len(user), neg_num), np.int32)
@@ -57,7 +60,8 @@ def collate(data):
         graph.append(da[1])
         last_item.append(da[2])
         label.append(da[3])
-    return torch.Tensor(user).long(), dgl.batch_hetero(graph), torch.Tensor(last_item).long(), torch.Tensor(label).long()
+    return torch.Tensor(user).long(), dgl.batch_hetero(graph), torch.Tensor(last_item).long(), torch.Tensor(
+        label).long()
 
 
 def load_data(data_path):
@@ -86,7 +90,7 @@ def collate_test(data, user_neg):
         user.append(da[4])
         length.append(da[5])
     return torch.Tensor(user_alis).long(), dgl.batch_hetero(graph), torch.Tensor(last_item).long(), \
-           torch.Tensor(label).long(), torch.Tensor(length).long(), torch.Tensor(neg_generate(user, user_neg)).long()
+        torch.Tensor(label).long(), torch.Tensor(length).long(), torch.Tensor(neg_generate(user, user_neg)).long()
 
 
 def trans_to_cuda(variable):
@@ -160,10 +164,9 @@ def eval_metric(all_top, all_label, all_length, random_rank=True):
                     ndgg5.append(0)
                 else:
                     ndgg5.append(1 / np.log2(np.where(top_ == target)[0][0] + 2))
-    #pd.DataFrame(data_l, columns=['r5','r10','r20','n5','n10','n10','number']).to_csv(name+'.csv')
+    # pd.DataFrame(data_l, columns=['r5','r10','r20','n5','n10','n10','number']).to_csv(name+'.csv')
     return np.mean(recall5), np.mean(recall10), np.mean(recall20), np.mean(ndgg5), np.mean(ndgg10), np.mean(ndgg20), \
-           pd.DataFrame(data_l, columns=['r5','r10','r20','n5','n10','n20','number'])
-
+        pd.DataFrame(data_l, columns=['r5', 'r10', 'r20', 'n5', 'n10', 'n20', 'number'])
 
 
 def format_arg_str(args, exclude_lst, max_len=20):
@@ -183,7 +186,7 @@ def format_arg_str(args, exclude_lst, max_len=20):
         value = arg_dict[key]
         if value is not None:
             key, value = str(key), str(value).replace('\t', '\\t')
-            value = value[:max_len-3] + '...' if len(value) > max_len else value
+            value = value[:max_len - 3] + '...' if len(value) > max_len else value
             res_str += ' ' + key + ' ' * (key_max_len - len(key)) + ' | ' \
                        + value + ' ' * (value_max_len - len(value)) + linesep
     res_str += '=' * horizon_len
