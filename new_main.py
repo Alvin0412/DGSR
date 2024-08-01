@@ -32,6 +32,12 @@ def collate_test_with_data_neg(x, data_neg):  # to avoid pickle error
     return collate_test(x, data_neg)
 
 
+def toggle_cuda(x: torch.Tensor) -> torch.tensor:
+    if torch.cuda.is_available():
+        return x.cuda()
+    return x
+
+
 def train():
     warnings.filterwarnings('ignore')
     parser = argparse.ArgumentParser()
@@ -40,7 +46,7 @@ def train():
     parser.add_argument('--hidden_size', type=int, default=50, help='hidden state size')
     parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--l2', type=float, default=0.0001, help='l2 penalty')
+    parser.add_argument('--l2', type=float, default=0.005, help='l2 penalty')
     parser.add_argument('--user_update', default='rnn')
     parser.add_argument('--item_update', default='rnn')
     parser.add_argument('--user_long', default='orgat')
@@ -57,7 +63,7 @@ def train():
     parser.add_argument('--last_item', action='store_true', help='aggreate last item')
     parser.add_argument("--record", action='store_true', default=False, help='record experimental results')
     parser.add_argument("--val", action='store_true', default=False)
-    parser.add_argument("--model_record", action='store_true', default=False, help='record model')
+    parser.add_argument("--model_record", action='store_true', default=True, help='record model')
 
     opt = parser.parse_args()
     args, extras = parser.parse_known_args()
@@ -65,9 +71,9 @@ def train():
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
         os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu
-    # elif torch.backends.mps.is_available():  # Apple silicon, fucking unsupported with dgl!!!!!!
-    #     device = torch.device('mps')
-    #     print("CUDA is not available. Using Metal instead.")
+    elif torch.backends.mps.is_available():
+        device = torch.device('mps')
+        print("CUDA is not available. Using Metal instead.")
     else:
         device = torch.device('cpu')
         print("CUDA is not available. Using CPU instead.")
@@ -147,7 +153,8 @@ def train():
             optimizer.step()
             epoch_loss += loss.item()
             if iter % 400 == 0:
-                print('[Epoch #{}] Iter {}, loss {:.4f}'.format(epoch, iter, epoch_loss / iter), datetime.datetime.now())
+                print('[Epoch #{}] Iter {}, loss {:.4f}'.format(epoch, iter, epoch_loss / iter),
+                      datetime.datetime.now())
         epoch_loss /= iter
         model.eval()
         print('Epoch {}, loss {:.4f}'.format(epoch, epoch_loss), '=============================================')
@@ -161,7 +168,7 @@ def train():
                     score, top = model(batch_graph.to(device), user.to(device), last_item.to(device),
                                        neg_tar=torch.cat([label.unsqueeze(1), neg_tar], -1).to(device),
                                        is_training=False)
-                    val_loss = loss_func(score, label.cuda())
+                    val_loss = loss_func(score, toggle_cuda(label))
                     val_loss_all.append(val_loss.append(val_loss.item()))
                     top_val.append(top.detach().cpu().numpy())
                 recall5, recall10, recall20, ndgg5, ndgg10, ndgg20 = eval_metric(top_val)
@@ -179,7 +186,8 @@ def train():
                 iter += 1
                 score, top = model(batch_graph.to(device), user.to(device), last_item.to(device),
                                    neg_tar=torch.cat([label.unsqueeze(1), neg_tar], -1).to(device), is_training=False)
-                test_loss = loss_func(score, label.cuda())
+
+                test_loss = loss_func(score, toggle_cuda(label))
                 all_loss.append(test_loss.item())
                 all_top.append(top.detach().cpu().numpy())
                 all_label.append(label.numpy())

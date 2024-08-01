@@ -1,0 +1,3 @@
+dgl==2.1.0
+torch~=2.2.0
+torchtext~=0.17.0

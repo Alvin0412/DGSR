@@ -13,3 +13,5 @@ __pycache__/
 
 # Ignore the debug_purpose.py file
 debug_purpose.py
+
+/logs/
