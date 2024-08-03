@@ -52,11 +52,12 @@ class DGSR(nn.Module):
     def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False):
         feat_dict = None
         user_layer = []
-        if torch.cuda.is_available():
-            g.nodes['user'].data['user_h'] = g.nodes['user'].data['user_h'].cuda()
-            g.nodes['item'].data['item_h'] = g.nodes['item'].data['item_h'].cuda()
-        g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
-        g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'])
+        g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'].cuda())
+        g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'].cuda())
+        # if torch.cuda.is_available():
+        #     g.nodes['user'].data['user_h'] = g.nodes['user'].data['user_h'].cuda()
+        #     g.nodes['item'].data['item_h'] = g.nodes['item'].data['item_h'].cuda()
+        
 
         if self.layer_num > 0:
             for conv in self.layers:
@@ -361,5 +362,6 @@ def collate_test(data, user_neg):
         graph.append(da[0][0])
         label.append(da[1]['target'])
         last_item.append(da[1]['last_alis'])
+    print(dgl.batch(graph).device)
     return torch.tensor(user).long(), dgl.batch(graph), torch.tensor(label).long(), torch.tensor(
         last_item).long(), torch.Tensor(neg_generate(user, user_neg)).long()
