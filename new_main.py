@@ -43,8 +43,8 @@ def train():
     warnings.filterwarnings('ignore')
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', default='Games', help='data name: Games')
-    parser.add_argument('--batchSize', type=int, default=200, help='input batch size')
-    parser.add_argument('--hidden_size', type=int, default=50, help='hidden state size')
+    parser.add_argument('--batchSize', type=int, default=256, help='input batch size')
+    parser.add_argument('--hidden_size', type=int, default=128, help='hidden state size')
     parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--l2', type=float, default=0.0005, help='l2 penalty')
@@ -60,7 +60,7 @@ def train():
     parser.add_argument('--item_max_length', type=int, default=50, help='the max length of item sequence')
     parser.add_argument('--user_max_length', type=int, default=50, help='the max length of use sequence')
     parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')
-    parser.add_argument('--gpu', default='4')
+    parser.add_argument('--gpu', default='0')
     parser.add_argument('--last_item', action='store_true', help='aggreate last item')
     parser.add_argument("--record", action='store_true', default=True, help='record experimental results')
     parser.add_argument("--val", action='store_true', default=False)
@@ -136,7 +136,7 @@ def train():
 
     optimizer = optim.Adam(model.parameters(), lr=opt.lr, weight_decay=opt.l2)
     loss_func = nn.CrossEntropyLoss()
-    best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrzr5,mrr10,mrr20
+    best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrr5,mrr10,mrr20
     best_epoch = [0, 0, 0, 0, 0, 0]
     stop_num = 0
     for epoch in range(opt.epoch):

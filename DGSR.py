@@ -52,12 +52,12 @@ class DGSR(nn.Module):
     def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False):
         feat_dict = None
         user_layer = []
-        g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
-        g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'])
         if torch.cuda.is_available():
-            g.nodes['user'].data['user_h'] = g.nodes['user'].data['user_h'].cuda()
-            g.nodes['item'].data['item_h'] = g.nodes['item'].data['item_h'].cuda()
-
+            g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'].cuda())
+            g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'].cuda())
+        else:
+            g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
+            g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'])
 
         if self.layer_num > 0:
             for conv in self.layers:
@@ -66,20 +66,20 @@ class DGSR(nn.Module):
             if self.last_item:
                 item_embed = graph_item(g, last_item_index, feat_dict['item'])
                 user_layer.append(item_embed)
-        unified_embedding = self.unified_map(torch.cat(user_layer, -1))
-        score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
-        if is_training:
-            return score
-        else:
-            neg_embedding = self.item_embedding(neg_tar)
-            score_neg = torch.matmul(unified_embedding.unsqueeze(1), neg_embedding.transpose(2, 1)).squeeze(1)
-            return score, score_neg
+            unified_embedding = self.unified_map(torch.cat(user_layer, -1))
+            score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
+            if is_training:
+                return score
+            else:
+                neg_embedding = self.item_embedding(neg_tar)
+                score_neg = torch.matmul(unified_embedding.unsqueeze(1), neg_embedding.transpose(2, 1)).squeeze(1)
+                return score, score_neg
 
-    def reset_parameters(self):
-        gain = nn.init.calculate_gain('relu')
-        for weight in self.parameters():
-            if len(weight.shape) > 1:
-                nn.init.xavier_normal_(weight, gain=gain)
+        def reset_parameters(self):
+            gain = nn.init.calculate_gain('relu')
+            for weight in self.parameters():
+                if len(weight.shape) > 1:
+                    nn.init.xavier_normal_(weight, gain=gain)
 
 
 class DGSRLayers(nn.Module):
@@ -362,5 +362,6 @@ def collate_test(data, user_neg):
         graph.append(da[0][0])
         label.append(da[1]['target'])
         last_item.append(da[1]['last_alis'])
+    print(dgl.batch(graph).device)
     return torch.tensor(user).long(), dgl.batch(graph), torch.tensor(label).long(), torch.tensor(
         last_item).long(), torch.Tensor(neg_generate(user, user_neg)).long()
