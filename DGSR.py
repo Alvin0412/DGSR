@@ -52,11 +52,12 @@ class DGSR(nn.Module):
     def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False):
         feat_dict = None
         user_layer = []
+        g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
+        g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'])
         if torch.cuda.is_available():
             g.nodes['user'].data['user_h'] = g.nodes['user'].data['user_h'].cuda()
             g.nodes['item'].data['item_h'] = g.nodes['item'].data['item_h'].cuda()
-        g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
-        g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'])
+
 
         if self.layer_num > 0:
             for conv in self.layers:

@@ -15,3 +15,5 @@ __pycache__/
 debug_purpose.py
 
 /logs/
+
+/results

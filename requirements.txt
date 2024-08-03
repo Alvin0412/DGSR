@@ -1,0 +1,4 @@
+dgl~=2.2.0
+numpy~=1.23.5
+pandas~=2.0.3
+joblib~=1.2.0

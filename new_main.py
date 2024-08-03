@@ -6,6 +6,7 @@
 # @Software: PyCharm
 
 import datetime
+import pathlib
 from multiprocessing import freeze_support
 
 import torch
@@ -42,11 +43,11 @@ def train():
     warnings.filterwarnings('ignore')
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', default='Games', help='data name: Games')
-    parser.add_argument('--batchSize', type=int, default=50, help='input batch size')
+    parser.add_argument('--batchSize', type=int, default=200, help='input batch size')
     parser.add_argument('--hidden_size', type=int, default=50, help='hidden state size')
     parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--l2', type=float, default=0.005, help='l2 penalty')
+    parser.add_argument('--l2', type=float, default=0.0005, help='l2 penalty')
     parser.add_argument('--user_update', default='rnn')
     parser.add_argument('--item_update', default='rnn')
     parser.add_argument('--user_long', default='orgat')
@@ -61,7 +62,7 @@ def train():
     parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')
     parser.add_argument('--gpu', default='4')
     parser.add_argument('--last_item', action='store_true', help='aggreate last item')
-    parser.add_argument("--record", action='store_true', default=False, help='record experimental results')
+    parser.add_argument("--record", action='store_true', default=True, help='record experimental results')
     parser.add_argument("--val", action='store_true', default=False)
     parser.add_argument("--model_record", action='store_true', default=True, help='record model')
 
@@ -71,9 +72,9 @@ def train():
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
         os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu
-    elif torch.backends.mps.is_available():
-        device = torch.device('mps')
-        print("CUDA is not available. Using Metal instead.")
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device('mps')
+    #     print("CUDA is not available. Using Metal instead.")
     else:
         device = torch.device('cpu')
         print("CUDA is not available. Using CPU instead.")
@@ -135,7 +136,7 @@ def train():
 
     optimizer = optim.Adam(model.parameters(), lr=opt.lr, weight_decay=opt.l2)
     loss_func = nn.CrossEntropyLoss()
-    best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrr5,mrr10,mrr20
+    best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrzr5,mrr10,mrr20
     best_epoch = [0, 0, 0, 0, 0, 0]
     stop_num = 0
     for epoch in range(opt.epoch):
@@ -200,7 +201,9 @@ def train():
                 stop = False
             if recall10 > best_result[1]:
                 if opt.model_record:
-                    torch.save(model.state_dict(), 'save_models/' + model_file + '.pkl')
+                    save_dir = pathlib.Path('save_models/')
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                    torch.save(model.state_dict(), save_dir / f'{model_file}.pkl')
                 best_result[1] = recall10
                 best_epoch[1] = epoch
                 stop = False
