@@ -67,7 +67,7 @@ def generate_graph(data):
     return graph
 
 
-def generate_user(user, data, graph, item_max_length, user_max_length, train_path, test_path, k_hop=3, val_path=None):
+def generate_user(user, data, graph: dgl.DGLGraph, item_max_length, user_max_length, train_path, test_path, k_hop=3, val_path=None):
     data_user = data[data['user_id'] == user].sort_values('time')
     u_time = data_user['time'].values
     u_seq = data_user['item_id'].values
@@ -161,6 +161,8 @@ if __name__ == '__main__':
         save_graphs(graph_path, graph)
     else:
         graph = dgl.load_graphs(graph_path)[0][0]
+
+
     train_path = f'Newdata/{opt.data}_{opt.item_max_length}_{opt.user_max_length}_{opt.k_hop}/train/'
     val_path = f'Newdata/{opt.data}_{opt.item_max_length}_{opt.user_max_length}_{opt.k_hop}/val/'
     test_path = f'Newdata/{opt.data}_{opt.item_max_length}_{opt.user_max_length}_{opt.k_hop}/test/'

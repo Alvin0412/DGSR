@@ -14,6 +14,31 @@ import numpy as np
 from torch import device
 from torch.nn.modules.module import T
 
+import torch
+
+
+def detect_over_squashing(embeddings, name="embedding"):
+    embeddings = embeddings.clone().detach().requires_grad_(True)
+
+    # Initialize list to store Jacobian norms
+    jacobian_norms = []
+
+    for i in range(embeddings.size(0)):
+        # Calculate Jacobian for each embedding vector
+        jacobian = torch.autograd.functional.jacobian(lambda x: x, embeddings[i].unsqueeze(0))
+
+        # Calculate norm of the Jacobian
+        jacobian_norm = torch.norm(jacobian, dim=(1, 2))
+        jacobian_norms.append(jacobian_norm.item())
+
+    # Convert list of norms to tensor
+    jacobian_norms = torch.tensor(jacobian_norms)
+    print(f"{name} Jacobian Norm:", jacobian_norms)
+
+    # Calculate gradients
+    gradients = torch.autograd.grad(embeddings.sum(), embeddings, retain_graph=True)[0]
+    print(f"{name} Gradients:", gradients)
+
 
 class DGSR(nn.Module):
     def __init__(self, user_num, item_num, input_dim, item_max_length, user_max_length, feat_drop=0.2, attn_drop=0.2,
@@ -52,7 +77,7 @@ class DGSR(nn.Module):
     def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False):
         feat_dict = None
         user_layer = []
-        if torch.cuda.is_available():
+        if torch.cuda.is_available():  # update embedding
             g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'].cuda())
             g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'].cuda())
         else:
@@ -67,6 +92,8 @@ class DGSR(nn.Module):
                 item_embed = graph_item(g, last_item_index, feat_dict['item'])
                 user_layer.append(item_embed)
             unified_embedding = self.unified_map(torch.cat(user_layer, -1))
+
+            self.detect_over_squashing(unified_embedding, name="unified_embedding")
             score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
             if is_training:
                 return score
@@ -75,11 +102,37 @@ class DGSR(nn.Module):
                 score_neg = torch.matmul(unified_embedding.unsqueeze(1), neg_embedding.transpose(2, 1)).squeeze(1)
                 return score, score_neg
 
-        def reset_parameters(self):
-            gain = nn.init.calculate_gain('relu')
-            for weight in self.parameters():
-                if len(weight.shape) > 1:
-                    nn.init.xavier_normal_(weight, gain=gain)
+    def detect_over_squashing(self, embeddings, name="embedding"):
+        embeddings = embeddings.clone().detach().requires_grad_(True)
+
+        # Initialize list to store Jacobian norms
+        jacobian_norms = []
+
+        for i in range(embeddings.size(0)):
+            # Define a function to return the embeddings for a specific input
+            def get_embedding(embedding):
+                return embedding.unsqueeze(0)
+
+            # Calculate Jacobian for each embedding vector
+            jacobian = torch.autograd.functional.jacobian(get_embedding, embeddings[i])
+
+            # Calculate norm of the Jacobian
+            jacobian_norm = torch.norm(jacobian, dim=(1, 2)).item()
+            jacobian_norms.append(jacobian_norm)
+
+        # Convert list of norms to tensor
+        jacobian_norms = torch.tensor(jacobian_norms)
+        print(f"{name} Jacobian Norms:", jacobian_norms)
+
+        # Calculate gradients of the cloned embeddings
+        gradients = torch.autograd.grad(embeddings.sum(), embeddings, retain_graph=True)[0]
+        print(f"{name} Gradients:", gradients)
+
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain('relu')
+        for weight in self.parameters():
+            if len(weight.shape) > 1:
+                nn.init.xavier_normal_(weight, gain=gain)
 
 
 class DGSRLayers(nn.Module):
@@ -167,7 +220,7 @@ class DGSRLayers(nn.Module):
             print('error: no item_update')
             exit()
 
-    def forward(self, g, feat_dict=None):
+    def forward(self, g: dgl.DGLGraph, feat_dict=None):
         if feat_dict == None:
             if self.user_long in ['gcn']:
                 g.nodes['user'].data['norm'] = g['by'].in_degrees().unsqueeze(1)
@@ -196,7 +249,7 @@ class DGSRLayers(nn.Module):
         f_dict = {'user': g.nodes['user'].data['user_h'], 'item': g.nodes['item'].data['item_h']}
         return f_dict
 
-    def graph_update(self, g):
+    def graph_update(self, g: dgl.DGLGraph):
         # user_encoder 对user进行编码
         # update all nodes
         g.multi_update_all({'by': (self.user_message_func, self.user_reduce_func),
