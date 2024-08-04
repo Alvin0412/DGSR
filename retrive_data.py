@@ -6,14 +6,11 @@ from google.colab import drive
 from joblib import Parallel, delayed
 
 
-def find_latest_backup(cwd_name: str, target_dir: pathlib.Path, depth=100):
-    for i in range(1, depth):
-        potential_path = target_dir / f"{cwd_name}_{i}"
-        if not potential_path.exists():
-            if i == 1:
-                raise Exception("No backup directories found")
-            return target_dir / f"{cwd_name}_{i - 1}"
-    raise Exception("Too many backup directories, cannot determine the latest")
+def find_latest_backup(cwd_name: str, target_dir: pathlib.Path):
+    potential_path = target_dir / f"{cwd_name}"
+    if not potential_path.exists():
+        raise Exception("No backup directories found")
+    return potential_path
 
 
 def copy_item(item, dest):
