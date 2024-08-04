@@ -93,7 +93,7 @@ class DGSR(nn.Module):
                 user_layer.append(item_embed)
             unified_embedding = self.unified_map(torch.cat(user_layer, -1))
 
-            self.detect_over_squashing(unified_embedding, name="unified_embedding")
+            # self.detect_over_squashing(unified_embedding, name="unified_embedding")
             score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
             if is_training:
                 return score
@@ -200,7 +200,7 @@ class DGSRLayers(nn.Module):
         elif self.user_update_m == 'norm':
             return self.feat_drop(self.norm_user(user_now)) + user_old
         elif self.user_update_m == 'rnn':
-            return F.tanh(self.user_update(torch.cat([user_now, user_old], -1)))
+            return F.tanh(self.user_update(torch.cat([user_now, user_old], -1)))  # formula 16
         else:
             print('error: no user_update')
             exit()
@@ -243,7 +243,7 @@ class DGSRLayers(nn.Module):
                 if torch.cuda.is_available(): g.edges['item'].data['norm'] = g.edges['item'].data['norm'].cuda()
         g.nodes['user'].data['user_h'] = self.user_weight(self.feat_drop(user_))
         g.nodes['item'].data['item_h'] = self.item_weight(self.feat_drop(item_))
-        g = self.graph_update(g)
+        g = self.graph_update(g) # involves MPc and AGG
         g.nodes['user'].data['user_h'] = self.user_update_function(g.nodes['user'].data['user_h'], user_)
         g.nodes['item'].data['item_h'] = self.item_update_function(g.nodes['item'].data['item_h'], item_)
         f_dict = {'user': g.nodes['user'].data['user_h'], 'item': g.nodes['item'].data['item_h']}

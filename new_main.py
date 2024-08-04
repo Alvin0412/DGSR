@@ -156,6 +156,9 @@ def train():
             if iter % 400 == 0:
                 print('[Epoch #{}] Iter {}, loss {:.4f}'.format(epoch, iter, epoch_loss / iter),
                       datetime.datetime.now())
+            else:
+                print('[Epoch #{}] Iter {}'.format(epoch, iter),
+                      datetime.datetime.now())
         epoch_loss /= iter
         model.eval()
         print('Epoch {}, loss {:.4f}'.format(epoch, epoch_loss), '=============================================')

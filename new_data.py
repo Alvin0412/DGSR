@@ -88,6 +88,7 @@ def generate_user(user, data, graph: dgl.DGLGraph, item_max_length, user_max_len
             sub_u_eid = (graph.edges['by'].data['time'] < u_time[j + 1]) & (graph.edges['by'].data['time'] >= start_t)
             sub_i_eid = (graph.edges['pby'].data['time'] < u_time[j + 1]) & (graph.edges['pby'].data['time'] >= start_t)
             sub_graph = dgl.edge_subgraph(graph, edges={'by': sub_u_eid, 'pby': sub_i_eid}, relabel_nodes=False)
+
             u_temp = torch.tensor([user])
             his_user = torch.tensor([user])
             graph_i = select_topk(sub_graph, item_max_length, weight='time', nodes={'user': u_temp})
