@@ -44,10 +44,33 @@ def refine_time(data):
     return data
 
 
+def refine_item_id(data):
+    data = data.sort_values(['item_id'], kind='mergesort')
+    data_min = data['item_id'][0]
+    if data_min != 0:
+        data['item_id'] = data['item_id'].apply(lambda x: x - data_min)
+    unique_item_ids = sorted(data['item_id'].unique())
+    id_map = {original_id: new_id for new_id, original_id in enumerate(unique_item_ids)}
+    data['item_id'] = data['item_id'].map(id_map)
+    return data
+
+
+def refine_user_id(data: pd.DataFrame):
+    # refined_user_idq = [i for i, _ in enumerate(data['user_id'].values)]
+    # data['user_id'] = refined_user_idq
+    data_min = data['user_id'].min()
+    if data_min != 0:
+        data['user_id'] = data['user_id'].apply(lambda x: x - data_min)
+    return data
+
+
 def generate_graph(data):
     data = data.groupby('user_id').apply(refine_time).reset_index(drop=True)
     data = data.groupby('user_id').apply(cal_order).reset_index(drop=True)
     data = data.groupby('item_id').apply(cal_u_order).reset_index(drop=True)
+
+    data = refine_item_id(data)
+    data = refine_user_id(data)
     user = data['user_id'].values
     item = data['item_id'].values
     time = data['time'].values
@@ -64,10 +87,13 @@ def generate_graph(data):
     graph.nodes['item'].data['item_id'] = torch.LongTensor(np.unique(item))
     # graph.nodes['item'].data['last_user'] = torch.tensor(data['u_last'])
     # graph.nodes['user'].data['last_item'] = torch.tensor(data['last'])
-    return graph
+    co_d = data.copy()
+
+    return data,graph
 
 
-def generate_user(user, data, graph: dgl.DGLGraph, item_max_length, user_max_length, train_path, test_path, k_hop=3, val_path=None):
+def generate_user(user, data, graph: dgl.DGLGraph, item_max_length, user_max_length, train_path, test_path, k_hop=3,
+                  val_path=None):
     data_user = data[data['user_id'] == user].sort_values('time')
     u_time = data_user['time'].values
     u_seq = data_user['item_id'].values
@@ -78,6 +104,7 @@ def generate_user(user, data, graph: dgl.DGLGraph, item_max_length, user_max_len
     if len(u_seq) < 3:
         return 0, 0
     else:
+        print(f"Generating #{user}")
         for j, t in enumerate(u_time[0:-1]):
             if j == 0:
                 continue
@@ -134,10 +161,15 @@ def generate_user(user, data, graph: dgl.DGLGraph, item_max_length, user_max_len
 
 def generate_data(data, graph, item_max_length, user_max_length, train_path, test_path, val_path, job=10, k_hop=3):
     user = data['user_id'].unique()
-    a = Parallel(n_jobs=job)(delayed(
+    a = Parallel(n_jobs=10, max_nbytes=10000 * 1024 * 1024 * 1024)(delayed(
         lambda u: generate_user(u, data, graph, item_max_length, user_max_length, train_path, test_path, k_hop,
                                 val_path))(u) for u in user)
     return a
+    # return generate_user(610, data, graph, item_max_length, user_max_length, train_path, test_path, k_hop,
+    #                      val_path)
+    # for u in user:
+    #     (lambda u: generate_user(u, data, graph, item_max_length, user_max_length, train_path, test_path, k_hop,
+    #                              val_path))(u)
 
 
 if __name__ == '__main__':
@@ -151,18 +183,23 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     data_path = './Data/' + opt.data + '.csv'
     graph_path = './Data/' + opt.data + '_graph'
-    data = pd.read_csv(data_path).groupby('user_id').apply(refine_time).reset_index(drop=True)
+    data = pd.read_csv(data_path)
+    data = data.groupby('user_id')
+    data = data.apply(refine_time)
+    data = data.reset_index(drop=True)
     data['time'] = data['time'].astype('int64')
     # if opt.graph
     #     graph = generate_graph(data)
     #     save_graphs(graph_path, graph)
     # else:
-    if not os.path.exists(graph_path):
-        graph = generate_graph(data)
-        save_graphs(graph_path, graph)
-    else:
-        graph = dgl.load_graphs(graph_path)[0][0]
+    data, graph = generate_graph(data)
 
+    save_graphs(graph_path, graph)
+    # if not os.path.exists(graph_path):
+    #     graph = generate_graph(data)
+    #     save_graphs(graph_path, graph)
+    # else:
+    #     graph = dgl.load_graphs(graph_path)[0][0]
 
     train_path = f'Newdata/{opt.data}_{opt.item_max_length}_{opt.user_max_length}_{opt.k_hop}/train/'
     val_path = f'Newdata/{opt.data}_{opt.item_max_length}_{opt.user_max_length}_{opt.k_hop}/val/'
@@ -170,7 +207,7 @@ if __name__ == '__main__':
     # generate_user(41, data, graph, opt.item_max_length, opt.user_max_length, train_path, test_path, k_hop=opt.k_hop)
     print('start:', datetime.datetime.now())
     all_num = generate_data(data, graph, opt.item_max_length, opt.user_max_length, train_path, test_path, val_path,
-                            job=opt.job, k_hop=opt.k_hop)
+                            job=3, k_hop=opt.k_hop, )
     train_num = 0
     test_num = 0
     for num_ in all_num:

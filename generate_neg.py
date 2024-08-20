@@ -12,7 +12,7 @@ from utils import myFloder, pickle_loader, collate, trans_to_cuda, \
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='Games',
+    parser.add_argument('--dataset', default='Movies',
                         help='dataset name: Games')
     opt = parser.parse_args()
     dataset = opt.dataset

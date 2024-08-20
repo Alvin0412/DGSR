@@ -6,7 +6,38 @@
 # @Software: PyCharm
 
 import numpy as np
+import argparse
 import sys
+
+def init_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data', default='Games', help='data name: Games')
+    parser.add_argument('--batchSize', type=int, default=256, help='input batch size')
+    parser.add_argument('--hidden_size', type=int, default=128, help='hidden state size')
+    parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
+    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
+    parser.add_argument('--l2', type=float, default=0.0005, help='l2 penalty')
+    parser.add_argument('--user_update', default='rnn')
+    parser.add_argument('--item_update', default='rnn')
+    parser.add_argument('--user_long', default='orgat')
+    parser.add_argument('--item_long', default='orgat')
+    parser.add_argument('--user_short', default='att')
+    parser.add_argument('--item_short', default='att')
+    parser.add_argument('--feat_drop', type=float, default=0.3, help='drop_out')
+    parser.add_argument('--attn_drop', type=float, default=0.3, help='drop_out')
+    parser.add_argument('--layer_num', type=int, default=3, help='GNN layer')
+    parser.add_argument('--item_max_length', type=int, default=50, help='the max length of item sequence')
+    parser.add_argument('--user_max_length', type=int, default=50, help='the max length of use sequence')
+    parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')
+    parser.add_argument('--gpu', default='0')
+    parser.add_argument('--last_item', action='store_true', help='aggreate last item')
+    parser.add_argument("--record", action='store_true', default=True, help='record experimental results')
+    parser.add_argument("--val", action='store_true', default=False)
+    parser.add_argument("--model_record", action='store_true', default=True, help='record model')
+    return parser
+
+
+
 
 def eval_metric(all_top, random_rank=True):
     recall5, recall10, recall20, ndgg5, ndgg10, ndgg20 = [], [], [], [], [], []

@@ -14,6 +14,8 @@ from sys import exit
 import pandas as pd
 import numpy as np
 from DGSR import DGSR, collate, collate_test
+# from KG import KGAT_KG, KGDataRetriever
+from Interim_models import KGDataRetriever, TaggingItems
 from dgl import load_graphs
 import pickle
 from utils import myFloder
@@ -26,7 +28,7 @@ from functools import partial
 from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
 import torch.nn as nn
-from DGSR_utils import eval_metric, mkdir_if_not_exist, Logger
+from DGSR_utils import eval_metric, mkdir_if_not_exist, Logger, init_parser
 
 
 def collate_test_with_data_neg(x, data_neg):  # to avoid pickle error
@@ -41,31 +43,7 @@ def toggle_cuda(x: torch.Tensor) -> torch.tensor:
 
 def train():
     warnings.filterwarnings('ignore')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data', default='Games', help='data name: Games')
-    parser.add_argument('--batchSize', type=int, default=256, help='input batch size')
-    parser.add_argument('--hidden_size', type=int, default=128, help='hidden state size')
-    parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
-    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--l2', type=float, default=0.0005, help='l2 penalty')
-    parser.add_argument('--user_update', default='rnn')
-    parser.add_argument('--item_update', default='rnn')
-    parser.add_argument('--user_long', default='orgat')
-    parser.add_argument('--item_long', default='orgat')
-    parser.add_argument('--user_short', default='att')
-    parser.add_argument('--item_short', default='att')
-    parser.add_argument('--feat_drop', type=float, default=0.3, help='drop_out')
-    parser.add_argument('--attn_drop', type=float, default=0.3, help='drop_out')
-    parser.add_argument('--layer_num', type=int, default=3, help='GNN layer')
-    parser.add_argument('--item_max_length', type=int, default=50, help='the max length of item sequence')
-    parser.add_argument('--user_max_length', type=int, default=50, help='the max length of use sequence')
-    parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')
-    parser.add_argument('--gpu', default='0')
-    parser.add_argument('--last_item', action='store_true', help='aggreate last item')
-    parser.add_argument("--record", action='store_true', default=True, help='record experimental results')
-    parser.add_argument("--val", action='store_true', default=False)
-    parser.add_argument("--model_record", action='store_true', default=True, help='record model')
-
+    parser = init_parser()
     opt = parser.parse_args()
     args, extras = parser.parse_known_args()
     # Mac support: Check if CUDA is available, otherwise use CPU
@@ -131,14 +109,21 @@ def train():
                  item_long=opt.item_long, item_short=opt.item_short, user_update=opt.user_update,
                  item_update=opt.item_update, last_item=opt.last_item,
                  layer_num=opt.layer_num)
+    kg_data_retriever = KGDataRetriever(n_users=user_num, n_items=item_num, data_name=opt.data)
+    kg_model = TaggingItems(item_num=item_num,
+                            tag_vocab=kg_data_retriever.tad_id_mapping,
+                            word2vec_model_path=None
+                            )
     if torch.cuda.is_available():
         model = model.cuda()
 
     optimizer = optim.Adam(model.parameters(), lr=opt.lr, weight_decay=opt.l2)
+    kg_optimizer = optim.Adam(kg_model.parameters(), lr=opt.lr, weight_decay=opt.l2)
     loss_func = nn.CrossEntropyLoss()
     best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrr5,mrr10,mrr20
     best_epoch = [0, 0, 0, 0, 0, 0]
     stop_num = 0
+
     for epoch in range(opt.epoch):
         stop = True
         epoch_loss = 0
@@ -146,12 +131,25 @@ def train():
         print('start training: ', datetime.datetime.now())
         model.train()
         for user, batch_graph, label, last_item in train_data:
+            # print(f"user: {user}")
             iter += 1
-            score = model(batch_graph.to(device), user.to(device), last_item.to(device), is_training=True)
+            kg_graph = kg_model.tag_item_graph_constructor(
+                kg_data_retriever.kg_heterograph, batch_graph
+            )
+            upd_embd = kg_model(kg_graph, batch_graph.nodes['item'].data['item_id'])
+            score = model(
+                batch_graph.to(device),
+                user.to(device),
+                last_item.to(device),
+                is_training=True,
+                tag_item_embedding=upd_embd
+            )
             loss = loss_func(score, label.to(device))
             optimizer.zero_grad()
+            kg_optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            kg_optimizer.step()
             epoch_loss += loss.item()
             if iter % 400 == 0:
                 print('[Epoch #{}] Iter {}, loss {:.4f}'.format(epoch, iter, epoch_loss / iter),
@@ -167,7 +165,7 @@ def train():
         if opt.val:
             print('start validation: ', datetime.datetime.now())
             val_loss_all, top_val = [], []
-            with torch.no_grad:
+            with torch.no_grad():
                 for user, batch_graph, label, last_item, neg_tar in val_data:
                     score, top = model(batch_graph.to(device), user.to(device), last_item.to(device),
                                        neg_tar=torch.cat([label.unsqueeze(1), neg_tar], -1).to(device),
@@ -195,7 +193,7 @@ def train():
                 all_loss.append(test_loss.item())
                 all_top.append(top.detach().cpu().numpy())
                 all_label.append(label.numpy())
-                if iter % 200 == 0:
+                if iter % 100 == 0:
                     print('Iter {}, test_loss {:.4f}'.format(iter, np.mean(all_loss)), datetime.datetime.now())
             recall5, recall10, recall20, ndgg5, ndgg10, ndgg20 = eval_metric(all_top)
             if recall5 > best_result[0]:

@@ -17,6 +17,12 @@ from torch.nn.modules.module import T
 import torch
 
 
+def toggle_cuda(x):
+    if torch.cuda.is_available():
+        return x.cuda()
+    return x
+
+
 def detect_over_squashing(embeddings, name="embedding"):
     embeddings = embeddings.clone().detach().requires_grad_(True)
 
@@ -43,7 +49,7 @@ def detect_over_squashing(embeddings, name="embedding"):
 class DGSR(nn.Module):
     def __init__(self, user_num, item_num, input_dim, item_max_length, user_max_length, feat_drop=0.2, attn_drop=0.2,
                  user_long='orgat', user_short='att', item_long='ogat', item_short='att', user_update='rnn',
-                 item_update='rnn', last_item=True, layer_num=3, time=True):
+                 item_update='rnn', last_item=True, layer_num=3, time=True, require_recommendation=False, top_k=10):
         super(DGSR, self).__init__()
         self.user_num = user_num
         self.item_num = item_num
@@ -61,6 +67,8 @@ class DGSR(nn.Module):
         # update function
         self.user_update = user_update
         self.item_update = item_update
+        self.require_recommendation = require_recommendation
+        self.top_k = top_k
 
         self.user_embedding = nn.Embedding(self.user_num, self.hidden_size)
         self.item_embedding = nn.Embedding(self.item_num, self.hidden_size)
@@ -74,33 +82,93 @@ class DGSR(nn.Module):
                                                 self.user_update, self.item_update) for _ in range(self.layer_num)])
         self.reset_parameters()
 
-    def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False):
+    def init_embeddings(self, g, tag_item_embedding: nn.Embedding = None, alpha=torch.tensor(0.25)):
+        # 初始化 item embedding
+        if tag_item_embedding is not None:
+            item_init = alpha * toggle_cuda(tag_item_embedding) + (1 - alpha) * self.item_embedding(
+                toggle_cuda(g.nodes['item'].data['item_id']))
+        else:
+            item_init = self.item_embedding(toggle_cuda(g.nodes['item'].data['item_id']))
+
+        # 初始化 user 和 item 的 embedding
+        g.nodes['user'].data['user_h'] = self.user_embedding(toggle_cuda(g.nodes['user'].data['user_id']))
+        g.nodes['item'].data['item_h'] = toggle_cuda(item_init)
+
+    def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False,
+                tag_item_embedding: nn.Embedding = None, alpha=torch.tensor(0.25)):
+        # 1. 初始化 embedding
+        self.init_embeddings(g, tag_item_embedding, alpha)
+
+        # 2. 执行剩余的 forward 功能
         feat_dict = None
         user_layer = []
-        if torch.cuda.is_available():  # update embedding
-            g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'].cuda())
-            g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'].cuda())
-        else:
-            g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
-            g.nodes['item'].data['item_h'] = self.item_embedding(g.nodes['item'].data['item_id'])
 
+        # 通过每层的 GNN 进行消息传递和 embedding 更新
         if self.layer_num > 0:
             for conv in self.layers:
                 feat_dict = conv(g, feat_dict)
                 user_layer.append(graph_user(g, user_index, feat_dict['user']))
+
+            # 如果考虑 last_item，加入最后的 item embedding
             if self.last_item:
                 item_embed = graph_item(g, last_item_index, feat_dict['item'])
                 user_layer.append(item_embed)
+
+            # 聚合 embedding
             unified_embedding = self.unified_map(torch.cat(user_layer, -1))
 
-            # self.detect_over_squashing(unified_embedding, name="unified_embedding")
+            # 计算用户与所有 item 的得分
             score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
+
+            # 返回训练阶段的结果
             if is_training:
                 return score
             else:
+                # 处理负采样
                 neg_embedding = self.item_embedding(neg_tar)
                 score_neg = torch.matmul(unified_embedding.unsqueeze(1), neg_embedding.transpose(2, 1)).squeeze(1)
-                return score, score_neg
+                if not self.require_recommendation:
+                    return score, score_neg
+
+                # 返回前 top_k 个 item
+                _, top_k_items = torch.topk(score, k=self.top_k, dim=0)
+                return score, score_neg, top_k_items
+
+    # def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False,
+    #             kg_item_embedding: nn.Embedding = None, alpha=torch.tensor(0.25)):
+    #     feat_dict = None
+    #     user_layer = []
+    #     if kg_item_embedding is not None:
+    #         item_init = alpha * kg_item_embedding.cuda() + (1-alpha) * self.item_embedding(g.nodes['item'].data['item_id'].cuda())
+    #     else:
+    #         item_init = self.item_embedding(g.nodes['item'].data['item_id'].cuda())
+    #     if torch.cuda.is_available():  # update embedding
+    #         g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'].cuda())
+    #         g.nodes['item'].data['item_h'] = item_init
+    #     else:
+    #         g.nodes['user'].data['user_h'] = self.user_embedding(g.nodes['user'].data['user_id'])
+    #         g.nodes['item'].data['item_h'] = item_init
+    #
+    #     if self.layer_num > 0:
+    #         for conv in self.layers:
+    #             feat_dict = conv(g, feat_dict)
+    #             user_layer.append(graph_user(g, user_index, feat_dict['user']))
+    #         if self.last_item:
+    #             item_embed = graph_item(g, last_item_index, feat_dict['item'])
+    #             user_layer.append(item_embed)
+    #         unified_embedding = self.unified_map(torch.cat(user_layer, -1))
+    #
+    #         # self.detect_over_squashing(unified_embedding, name="unified_embedding")
+    #         score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
+    #         if is_training:
+    #             return score
+    #         else:
+    #             neg_embedding = self.item_embedding(neg_tar)
+    #             score_neg = torch.matmul(unified_embedding.unsqueeze(1), neg_embedding.transpose(2, 1)).squeeze(1)
+    #             if not self.require_recommendation:
+    #                 return score, score_neg
+    #             _, top_k_items = torch.topk(score, k=self.top_k, dim=0)
+    #             return score, score_neg, top_k_items
 
     def detect_over_squashing(self, embeddings, name="embedding"):
         embeddings = embeddings.clone().detach().requires_grad_(True)
@@ -241,9 +309,10 @@ class DGSRLayers(nn.Module):
             if self.item_long in ['gcn']:
                 g.nodes['item'].data['norm'] = g['by'].out_degrees().unsqueeze(1)
                 if torch.cuda.is_available(): g.edges['item'].data['norm'] = g.edges['item'].data['norm'].cuda()
+
         g.nodes['user'].data['user_h'] = self.user_weight(self.feat_drop(user_))
-        g.nodes['item'].data['item_h'] = self.item_weight(self.feat_drop(item_))
-        g = self.graph_update(g) # involves MPc and AGG
+
+        g = self.graph_update(g)  # involves MPc and AGG
         g.nodes['user'].data['user_h'] = self.user_update_function(g.nodes['user'].data['user_h'], user_)
         g.nodes['item'].data['item_h'] = self.item_update_function(g.nodes['item'].data['item_h'], item_)
         f_dict = {'user': g.nodes['user'].data['user_h'], 'item': g.nodes['item'].data['item_h']}
