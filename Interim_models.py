@@ -83,22 +83,62 @@ class CustomSAGEConv(nn.Module):
 
 
 class Word2VecEmbedding(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, word2vec_model_path: pathlib.Path, tag_vocab):
+    def __init__(self, vocab_size,
+                 embedding_dim,
+                 word2vec_model_path: pathlib.Path,
+                 tag_vocab,
+                 extract_word2vec_embedding=False):
         super(Word2VecEmbedding, self).__init__()
+        self.word2vec_model_path = word2vec_model_path
+        embedding_matrix = torch.randn(vocab_size, embedding_dim)
 
-        # 加载预训练的 Word2Vec 模型
-        self.word2vec = KeyedVectors.load(str(word2vec_model_path))
+        if not extract_word2vec_embedding:
+            if not self.word2vec_model_path.exists():
+                raise FileNotFoundError(f"Word2Vec model not found at {word2vec_model_path}")
+            print(f"Loading Word2Vec model from {self.word2vec_model_path}")
+            self.word2vec = KeyedVectors.load_word2vec_format(str(self.word2vec_model_path), binary=True)
+            for i, tag in tag_vocab.items():
+                if tag in self.word2vec:
+                    embedding_matrix[i] = torch.tensor(self.word2vec[tag])
+            self.save_embeddings(tag_vocab, embedding_matrix, word2vec_model_path.parent)
+        else:
+            print(f"Loading Word2Vec model from the cached word embedding file of {self.word2vec_model_path}")
+            load_bag, load_embd = self.load_embeddings_from_csv(
+                word2vec_model_path.parent / f"{self.word2vec_model_path.stem}_tag_embeddings.csv")
+            for i, tag in tag_vocab.items():
+                if tag in load_bag:
+                    embedding_matrix[i] = torch.tensor(load_embd[i])
 
-        # 初始化嵌入矩阵
-        embedding_matrix = torch.randn(vocab_size, embedding_dim)  # 随机初始化未找到的嵌入
-
-        # 为每个标签词生成嵌入
-        for i, tag in enumerate(tag_vocab):
-            if tag in self.word2vec:
-                embedding_matrix[i] = torch.tensor(self.word2vec[tag])
-
-        # 将预训练的嵌入矩阵加载到 nn.Embedding 层
         self.embedding = nn.Embedding.from_pretrained(embedding_matrix, freeze=False)  # freeze=False 表示嵌入是可学习的
+
+    @staticmethod
+    def load_embeddings_from_csv(csv_path):
+        df = pd.read_csv(csv_path)
+
+        tags = df['tags'].tolist()  # 标签列
+        embeddings = df.drop(columns=['tags']).values  # 嵌入向量部分
+
+        tag_vocab = {tag: idx for idx, tag in enumerate(tags)}
+
+        # 将嵌入矩阵转换为 torch.Tensor
+        embedding_matrix = torch.tensor(embeddings, dtype=torch.float)
+
+        return tag_vocab, embedding_matrix
+
+    def save_embeddings(self, tag_vocab, embedding_matrix, save_dir):
+        embeddings = []
+        header = ['tags']
+        for i in range(embedding_matrix.shape[1]):
+            header.append(f"col_{i}")
+        for i, tag in tag_vocab.items():
+            vector = embedding_matrix[i].detach().numpy()
+            embeddings.append([tag] + vector.tolist())
+
+        save_path = save_dir / f"{self.word2vec_model_path.stem}_tag_embeddings.csv"
+
+        df = pd.DataFrame(embeddings, columns=header)
+        df.to_csv(save_path, index=False, header=True)
+        print(f"Embeddings saved to {save_path}")
 
     def forward(self, tag_ids):
         return self.embedding(tag_ids)
@@ -187,9 +227,9 @@ class TaggingItems(torch.nn.Module):
     """
 
     def __init__(self, item_num, tag_vocab: dict,
-                 num_gnn_layers=4, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=128,
+                 num_gnn_layers=4, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=300,
                  word2vec_model_path: pathlib.Path | None = pathlib.Path(
-                     __file__).parent / "pretrained" / "word2vec-google-news-300.model"):
+                     __file__).parent / "pretrained" / "GoogleNews-vectors-negative300.bin"):
         super(TaggingItems, self).__init__()
 
         # Item embedding 和 Tag embedding 的初始化
@@ -199,9 +239,13 @@ class TaggingItems(torch.nn.Module):
 
         self.tag_vocab = tag_vocab
         self.tag_num = len(self.tag_vocab.keys())
+        self._use_tag_pretrain = False
         if word2vec_model_path is not None and word2vec_model_path.exists():
+            # TODO: investigate that whether it will disappear
             print("Using word2vec pretrained model from: ", word2vec_model_path)
-            self.tag_embedding = Word2VecEmbedding(self.tag_num, hidden_size, word2vec_model_path, tag_vocab)
+            self.tag_embedding = Word2VecEmbedding(self.tag_num, hidden_size, word2vec_model_path, tag_vocab,
+                                                   extract_word2vec_embedding=True)
+            self._use_tag_pretrain = True
         else:
             print("Using default tag embedding")
             self.tag_embedding = nn.Embedding(self.tag_num, hidden_size)
@@ -216,7 +260,7 @@ class TaggingItems(torch.nn.Module):
                     'as': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm"),
                     'ras': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm")
                 },
-                aggregate='lstm'
+                aggregate='sum'
             )
             self.gnn_layers.append(conv_layer)
 
@@ -226,10 +270,9 @@ class TaggingItems(torch.nn.Module):
         self.feat_drop = nn.Dropout(feat_drop)
         self.attn_drop = nn.Dropout(attn_drop)
 
-        # 用于将更新后的 embedding 转换到合适的维度，使用 Leaky ReLU
         self.final = nn.Sequential(
             nn.Linear(self.hidden_size, self.n_output, bias=False),
-            nn.LeakyReLU(negative_slope)  # 替换 Tanh 为 Leaky ReLU
+            nn.LeakyReLU(negative_slope)
         )
 
         self.negative_slope = negative_slope
@@ -298,10 +341,12 @@ class TaggingItems(torch.nn.Module):
         return reconstructed_item_embed
 
     def reset_parameters(self):
-        gain = nn.init.calculate_gain('leaky_relu', param=self.negative_slope)  # 修改为 Leaky ReLU 的 gain
-        for weight in self.parameters():
-            if len(weight.shape) > 1:
-                nn.init.xavier_normal_(weight, gain=gain)
+        gain = nn.init.calculate_gain('leaky_relu', param=self.negative_slope)
+
+        for name, weight in self.named_parameters():
+            if not ('tag_embedding' in name and self._use_tag_pretrain):
+                if len(weight.shape) > 1:
+                    nn.init.xavier_normal_(weight, gain=gain)
 
 
 if __name__ == '__main__':
@@ -312,5 +357,5 @@ if __name__ == '__main__':
         len(users), len(items), data_name="Movies"
     )
     tagging_model = TaggingItems(item_num=len(items),
-                                 tag_vocab=kg_retriever.tad_id_mapping, word2vec_model_path=None
+                                 tag_vocab=kg_retriever.tad_id_mapping
                                  )

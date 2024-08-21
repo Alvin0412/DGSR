@@ -8,6 +8,7 @@
 # Ignore the Newdata folder
 Newdata/**
 pretrained/*.model
+pretrained/*.bin
 
 # Ignore the __pycache__ folder
 __pycache__/
