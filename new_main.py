@@ -109,16 +109,16 @@ def train():
                  item_long=opt.item_long, item_short=opt.item_short, user_update=opt.user_update,
                  item_update=opt.item_update, last_item=opt.last_item,
                  layer_num=opt.layer_num)
-    # kg_data_retriever = KGDataRetriever(n_users=user_num, n_items=item_num, data_name=opt.data)
-    # kg_model = TaggingItems(item_num=item_num,
-    #                         tag_vocab=kg_data_retriever.tad_id_mapping,
-    #                         word2vec_model_path=None
-    #                         )
+    kg_data_retriever = KGDataRetriever(n_users=user_num, n_items=item_num, data_name=opt.data)
+    kg_model = TaggingItems(item_num=item_num,
+                            tag_vocab=kg_data_retriever.tad_id_mapping,
+                            word2vec_model_path=None
+                            )
     if torch.cuda.is_available():
         model = model.cuda()
 
     optimizer = optim.Adam(model.parameters(), lr=opt.lr, weight_decay=opt.l2)
-    # kg_optimizer = optim.Adam(kg_model.parameters(), lr=opt.lr, weight_decay=opt.l2)
+    kg_optimizer = optim.Adam(kg_model.parameters(), lr=opt.lr, weight_decay=opt.l2)
     loss_func = nn.CrossEntropyLoss()
     best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrr5,mrr10,mrr20
     best_epoch = [0, 0, 0, 0, 0, 0]
@@ -133,24 +133,24 @@ def train():
         for user, batch_graph, label, last_item in train_data:
             # print(f"user: {user}")
             iter += 1
-            # kg_graph = kg_model.tag_item_graph_constructor(
-            #     kg_data_retriever.kg_heterograph, batch_graph
-            # )
-            # upd_embd = kg_model(kg_graph, batch_graph.nodes['item'].data['item_id'])
+            kg_graph = kg_model.tag_item_graph_constructor(
+                kg_data_retriever.kg_heterograph, batch_graph
+            )
+            upd_embd = kg_model(kg_graph, batch_graph.nodes['item'].data['item_id'])
             print(f"Done generate tagging embedding: {datetime.datetime.now()}")
             score = model(
                 batch_graph.to(device),
                 user.to(device),
                 last_item.to(device),
                 is_training=True,
-                # tag_item_embedding=upd_embd
+                tag_item_embedding=upd_embd
             )
             loss = loss_func(score, label.to(device))
             optimizer.zero_grad()
-            # kg_optimizer.zero_grad()
+            kg_optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            # kg_optimizer.step()
+            kg_optimizer.step()
             epoch_loss += loss.item()
             if iter % 400 == 0:
                 print('[Epoch #{}] Iter {}, loss {:.4f}'.format(epoch, iter, epoch_loss / iter),
