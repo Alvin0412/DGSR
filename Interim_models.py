@@ -231,7 +231,8 @@ class TaggingItems(torch.nn.Module):
                  word2vec_model_path: pathlib.Path | None = pathlib.Path(
                      __file__).parent / "pretrained" / "GoogleNews-vectors-negative300.bin"):
         super(TaggingItems, self).__init__()
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
         # Item embedding 和 Tag embedding 的初始化
         self.hidden_size = hidden_size
         self.n_output = self.hidden_size  # TODO: refine it
