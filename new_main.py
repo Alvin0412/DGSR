@@ -145,10 +145,14 @@ def train():
                 is_training=True,
                 tag_item_embedding=upd_embd
             )
+            print(f"loss - start {datetime.datetime.now()}")
             loss = loss_func(score, label.to(device))
+            print(f"loss - end {datetime.datetime.now()}")
             optimizer.zero_grad()
             kg_optimizer.zero_grad()
+            print(f"backprop - start {datetime.datetime.now()}")
             loss.backward()
+            print(f"backprop - end {datetime.datetime.now()}")
             optimizer.step()
             kg_optimizer.step()
             epoch_loss += loss.item()
