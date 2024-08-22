@@ -246,7 +246,7 @@ class TaggingItems(torch.nn.Module):
         self.tag_num = len(self.tag_vocab.keys())
         self._use_tag_pretrain = False
 
-        if word2vec_model_path is not None and word2vec_model_path.exists():
+        if word2vec_model_path is not None and word2vec_model_path.parent.exists():
             # TODO: investigate that whether it will disappear
             print("Using word2vec pretrained model from: ", word2vec_model_path)
             self.tag_embedding = Word2VecEmbedding(self.tag_num, hidden_size, word2vec_model_path, tag_vocab,
