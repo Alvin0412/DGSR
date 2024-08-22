@@ -231,11 +231,11 @@ class TaggingItems(torch.nn.Module):
                  word2vec_model_path: pathlib.Path | None = pathlib.Path(
                      __file__).parent / "pretrained" / "GoogleNews-vectors-negative300.bin"):
         super(TaggingItems, self).__init__()
-
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # Item embedding 和 Tag embedding 的初始化
         self.hidden_size = hidden_size
         self.n_output = self.hidden_size  # TODO: refine it
-        self.item_embedding = nn.Embedding(item_num, hidden_size)
+        self.item_embedding = nn.Embedding(item_num, hidden_size).to(device)
 
         self.tag_vocab = tag_vocab
         self.tag_num = len(self.tag_vocab.keys())
@@ -244,36 +244,36 @@ class TaggingItems(torch.nn.Module):
             # TODO: investigate that whether it will disappear
             print("Using word2vec pretrained model from: ", word2vec_model_path)
             self.tag_embedding = Word2VecEmbedding(self.tag_num, hidden_size, word2vec_model_path, tag_vocab,
-                                                   extract_word2vec_embedding=True)
+                                                   extract_word2vec_embedding=True).to(device)
             self._use_tag_pretrain = True
         else:
             print("Using default tag embedding")
-            self.tag_embedding = nn.Embedding(self.tag_num, hidden_size)
+            self.tag_embedding = nn.Embedding(self.tag_num, hidden_size).to(device)
         # GNN 层的初始化 (GraphSAGE 或 GCN)
         # self.gnn_layers = nn.ModuleList(  # TODO: Add custom GNN option
         #     [SAGEConv(hidden_size, hidden_size, aggregator_type="lstm") for _ in range(num_gnn_layers)])
 
-        self.gnn_layers = nn.ModuleList()
+        self.gnn_layers = nn.ModuleList().to(device)
         for _ in range(num_gnn_layers):
             conv_layer = HeteroGraphConv(
                 {
-                    'as': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm"),
-                    'ras': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm")
+                    'as': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm").to(device),
+                    'ras': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm").to(device),
                 },
                 aggregate='sum'
-            )
+            ).to(device)
             self.gnn_layers.append(conv_layer)
 
-        self.norm_layers = nn.ModuleList([nn.LayerNorm(hidden_size) for _ in range(num_gnn_layers)])
+        self.norm_layers = nn.ModuleList([nn.LayerNorm(hidden_size).to(device) for _ in range(num_gnn_layers)])
 
         # 其他相关参数
-        self.feat_drop = nn.Dropout(feat_drop)
-        self.attn_drop = nn.Dropout(attn_drop)
+        self.feat_drop = nn.Dropout(feat_drop).to(device)
+        self.attn_drop = nn.Dropout(attn_drop).to(device)
 
         self.final = nn.Sequential(
             nn.Linear(self.hidden_size, self.n_output, bias=False),
             nn.LeakyReLU(negative_slope)
-        )
+        ).to(device)
 
         self.negative_slope = negative_slope
         self.reset_parameters()

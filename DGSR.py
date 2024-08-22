@@ -314,6 +314,7 @@ class DGSRLayers(nn.Module):
 
         # print(f"User features are on device: {user_.device}, Item features are on device: {item_.device}")
         g.nodes['user'].data['user_h'] = self.user_weight(self.feat_drop(user_))
+        g.nodes['item'].data['item_h'] = self.item_weight(self.feat_drop(item_))
         print(f"Timing test - in layer: {datetime.datetime.now()}")
         g = self.graph_update(g)
         print(f"Timing test - graph upd: {datetime.datetime.now()}")
