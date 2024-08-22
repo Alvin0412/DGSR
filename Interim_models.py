@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from dgl.nn.pytorch import SAGEConv, HeteroGraphConv
 from gensim.models import KeyedVectors
+from sklearn.decomposition import KernelPCA
+from sklearn.random_projection import SparseRandomProjection
 
 
 class CustomSAGEConv(nn.Module):
@@ -91,7 +93,7 @@ class Word2VecEmbedding(nn.Module):
         super(Word2VecEmbedding, self).__init__()
         self.word2vec_model_path = word2vec_model_path
         embedding_matrix = torch.randn(vocab_size, embedding_dim)
-
+        t_svd = SparseRandomProjection(n_components=embedding_dim)
         if not extract_word2vec_embedding:
             if not self.word2vec_model_path.exists():
                 raise FileNotFoundError(f"Word2Vec model not found at {word2vec_model_path}")
@@ -99,15 +101,17 @@ class Word2VecEmbedding(nn.Module):
             self.word2vec = KeyedVectors.load_word2vec_format(str(self.word2vec_model_path), binary=True)
             for i, tag in tag_vocab.items():
                 if tag in self.word2vec:
-                    embedding_matrix[i] = torch.tensor(self.word2vec[tag])
+                    embedding_matrix[i] = t_svd.transform(torch.tensor(self.word2vec[tag]))
             self.save_embeddings(tag_vocab, embedding_matrix, word2vec_model_path.parent)
         else:
             print(f"Loading Word2Vec model from the cached word embedding file of {self.word2vec_model_path}")
             load_bag, load_embd = self.load_embeddings_from_csv(
                 word2vec_model_path.parent / f"{self.word2vec_model_path.stem}_tag_embeddings.csv")
+            t_svd.fit(torch.tensor(load_embd))
+            trans_embd = t_svd.transform(torch.tensor(load_embd))
             for i, tag in tag_vocab.items():
                 if tag in load_bag:
-                    embedding_matrix[i] = torch.tensor(load_embd[i])
+                    embedding_matrix[i] = torch.tensor(trans_embd[i])
 
         self.embedding = nn.Embedding.from_pretrained(embedding_matrix, freeze=False)  # freeze=False 表示嵌入是可学习的
 
@@ -227,7 +231,7 @@ class TaggingItems(torch.nn.Module):
     """
 
     def __init__(self, item_num, tag_vocab: dict,
-                 num_gnn_layers=2, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=300,
+                 num_gnn_layers=2, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=128,
                  word2vec_model_path: pathlib.Path | None = pathlib.Path(
                      __file__).parent / "pretrained" / "GoogleNews-vectors-negative300.bin"):
         super(TaggingItems, self).__init__()
@@ -241,6 +245,7 @@ class TaggingItems(torch.nn.Module):
         self.tag_vocab = tag_vocab
         self.tag_num = len(self.tag_vocab.keys())
         self._use_tag_pretrain = False
+
         if word2vec_model_path is not None and word2vec_model_path.exists():
             # TODO: investigate that whether it will disappear
             print("Using word2vec pretrained model from: ", word2vec_model_path)
@@ -258,10 +263,10 @@ class TaggingItems(torch.nn.Module):
         for _ in range(num_gnn_layers):
             conv_layer = HeteroGraphConv(
                 {
-                    'as': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm").to(device),
-                    'ras': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm").to(device),
+                    'as': SAGEConv(hidden_size, hidden_size, aggregator_type="mean").to(device),
+                    'ras': SAGEConv(hidden_size, hidden_size, aggregator_type="mean").to(device),
                 },
-                aggregate='mean'
+                aggregate='sum'
             ).to(device)
             self.gnn_layers.append(conv_layer)
 

@@ -112,7 +112,6 @@ def train():
     kg_data_retriever = KGDataRetriever(n_users=user_num, n_items=item_num, data_name=opt.data)
     kg_model = TaggingItems(item_num=item_num,
                             tag_vocab=kg_data_retriever.tad_id_mapping,
-                            word2vec_model_path=None
                             )
     if torch.cuda.is_available():
         model = model.cuda()
