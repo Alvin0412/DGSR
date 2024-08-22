@@ -262,6 +262,7 @@ class DGSRLayers(nn.Module):
             self.u_time_encoding_k = toggle_cuda(nn.Embedding(self.item_max_length, self.hidden_size))
 
     def user_update_function(self, user_now, user_old):
+        print(f"User now is on device: {user_now.device}, User old is on device: {user_old.device}")
         if self.user_update_m == 'residual':
             return F.elu(user_now + user_old)
         elif self.user_update_m == 'concat':
@@ -275,6 +276,7 @@ class DGSRLayers(nn.Module):
             exit()
 
     def item_update_function(self, item_now, item_old):
+        print(f"Item now is on device: {item_now.device}, Item old is on device: {item_old.device}")
         if self.item_update_m == 'residual':
             return F.elu(item_now + item_old)
         elif self.item_update_m == 'concat':
@@ -289,6 +291,7 @@ class DGSRLayers(nn.Module):
 
     def forward(self, g: dgl.DGLGraph, feat_dict=None):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f"Graph is on device: {g.device}")
         g.to(device)
         if feat_dict == None:
             if self.user_long in ['gcn']:
@@ -305,6 +308,7 @@ class DGSRLayers(nn.Module):
             if self.item_long in ['gcn']:
                 g.nodes['item'].data['norm'] = toggle_cuda(g['by'].out_degrees().unsqueeze(1))
 
+        print(f"User features are on device: {user_.device}, Item features are on device: {item_.device}")
         g.nodes['user'].data['user_h'] = self.user_weight(self.feat_drop(user_))
 
         g = self.graph_update(g)
@@ -326,6 +330,7 @@ class DGSRLayers(nn.Module):
         return dic
 
     def item_reduce_func(self, nodes):
+        print(f"Nodes mailbox item_h is on device: {nodes.mailbox['item_h'].device}")
         h = []
         order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
         re_order = nodes.mailbox['time'].shape[1] - order - 1
