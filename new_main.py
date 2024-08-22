@@ -141,7 +141,7 @@ def train():
                 kg_data_retriever.kg_heterograph, batch_graph
             )
             upd_embd = kg_model(kg_graph, batch_graph.nodes['item'].data['item_id'])
-            print(f"Done generate tagging embedding: {datetime.datetime.now()}")
+            # print(f"Done generate tagging embedding: {datetime.datetime.now()}")
             score = model(
                 batch_graph.to(device),
                 user.to(device),
@@ -149,17 +149,17 @@ def train():
                 is_training=True,
                 tag_item_embedding=upd_embd
             )
-            print(f"loss - start {datetime.datetime.now()}")
+            # print(f"loss - start {datetime.datetime.now()}")
             loss = loss_func(score, label.to(device))
-            print(f"loss - end {datetime.datetime.now()}")
+            # print(f"loss - end {datetime.datetime.now()}")
             optimizer.zero_grad()
             kg_optimizer.zero_grad()
-            print(f"backprop - start {datetime.datetime.now()}")
+            # print(f"backprop - start {datetime.datetime.now()}")
             # with torch.autograd.profiler.profile(use_cuda=True) as prof:
             #     loss.backward()
             loss.backward()
             # print(prof.key_averages().table(sort_by="cuda_time_total"))
-            print(f"backprop - end {datetime.datetime.now()}")
+            # print(f"backprop - end {datetime.datetime.now()}")
             optimizer.step()
             kg_optimizer.step()
             epoch_loss += loss.item()
