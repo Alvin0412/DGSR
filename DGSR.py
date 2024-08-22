@@ -313,107 +313,102 @@ class DGSRLayers(nn.Module):
         f_dict = {'user': g.nodes['user'].data['user_h'], 'item': g.nodes['item'].data['item_h']}
         return f_dict
 
+    def graph_update(self, g: dgl.DGLGraph):
+        g.multi_update_all({'by': (self.user_message_func, self.user_reduce_func),
+                            'pby': (self.item_message_func, self.item_reduce_func)}, 'sum')
+        return g
 
-def graph_update(self, g: dgl.DGLGraph):
-    g.multi_update_all({'by': (self.user_message_func, self.user_reduce_func),
-                        'pby': (self.item_message_func, self.item_reduce_func)}, 'sum')
-    return g
+    def item_message_func(self, edges):
+        dic = {}
+        dic['time'] = edges.data['time']
+        dic['user_h'] = edges.src['user_h']
+        dic['item_h'] = edges.dst['item_h']
+        return dic
 
+    def item_reduce_func(self, nodes):
+        h = []
+        order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
+        re_order = nodes.mailbox['time'].shape[1] - order - 1
+        length = nodes.mailbox['item_h'].shape[0]
+        if self.item_long == 'orgat':
+            e_ij = torch.sum(
+                toggle_cuda(self.i_time_encoding(re_order) + nodes.mailbox['user_h']) * nodes.mailbox['item_h'],
+                dim=2) \
+                   / torch.sqrt(toggle_cuda(torch.tensor(self.hidden_size).float()))
+            alpha = self.atten_drop(F.softmax(e_ij, dim=1))
+            if len(alpha.shape) == 2:
+                alpha = alpha.unsqueeze(2)
+            h_long = torch.sum(alpha * (nodes.mailbox['user_h'] + self.i_time_encoding_k(re_order)), dim=1)
+            h.append(h_long)
+        elif self.item_long == 'gru':
+            rnn_order = torch.sort(nodes.mailbox['time'], 1)[1]
+            _, hidden_u = self.gru_i(nodes.mailbox['user_h'][torch.arange(length).unsqueeze(1), rnn_order])
+            h.append(hidden_u.squeeze(0))
+        last = torch.argmax(nodes.mailbox['time'], 1)
+        last_em = nodes.mailbox['user_h'][torch.arange(length), last, :].unsqueeze(1)
+        if self.item_short == 'att':
+            e_ij1 = torch.sum(last_em * nodes.mailbox['user_h'], dim=2) / torch.sqrt(
+                toggle_cuda(torch.tensor(self.hidden_size).float()))
+            alpha1 = self.atten_drop(F.softmax(e_ij1, dim=1))
+            if len(alpha1.shape) == 2:
+                alpha1 = alpha1.unsqueeze(2)
+            h_short = torch.sum(alpha1 * nodes.mailbox['user_h'], dim=1)
+            h.append(h_short)
+        elif self.item_short == 'last':
+            h.append(last_em.squeeze())
+        if len(h) == 1:
+            return {'item_h': h[0]}
+        else:
+            return {'item_h': self.agg_gate_i(torch.cat(h, -1))}
 
-def item_message_func(self, edges):
-    dic = {}
-    dic['time'] = edges.data['time']
-    dic['user_h'] = edges.src['user_h']
-    dic['item_h'] = edges.dst['item_h']
-    return dic
+    def user_message_func(self, edges):
+        dic = {}
+        dic['time'] = edges.data['time']
+        dic['item_h'] = edges.src['item_h']
+        dic['user_h'] = edges.dst['user_h']
+        return dic
 
+    def user_reduce_func(self, nodes):
+        h = []
+        # Sort by time and create the reorder index
+        order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
+        re_order = nodes.mailbox['time'].shape[1] - order - 1
+        length = nodes.mailbox['user_h'].shape[0]
 
-def item_reduce_func(self, nodes):
-    h = []
-    order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
-    re_order = nodes.mailbox['time'].shape[1] - order - 1
-    length = nodes.mailbox['item_h'].shape[0]
-    if self.item_long == 'orgat':
-        e_ij = torch.sum(
-            toggle_cuda(self.i_time_encoding(re_order) + nodes.mailbox['user_h']) * nodes.mailbox['item_h'],
-            dim=2) \
-               / torch.sqrt(toggle_cuda(torch.tensor(self.hidden_size).float()))
-        alpha = self.atten_drop(F.softmax(e_ij, dim=1))
-        if len(alpha.shape) == 2:
-            alpha = alpha.unsqueeze(2)
-        h_long = torch.sum(alpha * (nodes.mailbox['user_h'] + self.i_time_encoding_k(re_order)), dim=1)
-        h.append(h_long)
-    elif self.item_long == 'gru':
-        rnn_order = torch.sort(nodes.mailbox['time'], 1)[1]
-        _, hidden_u = self.gru_i(nodes.mailbox['user_h'][torch.arange(length).unsqueeze(1), rnn_order])
-        h.append(hidden_u.squeeze(0))
-    last = torch.argmax(nodes.mailbox['time'], 1)
-    last_em = nodes.mailbox['user_h'][torch.arange(length), last, :].unsqueeze(1)
-    if self.item_short == 'att':
-        e_ij1 = torch.sum(last_em * nodes.mailbox['user_h'], dim=2) / torch.sqrt(
-            toggle_cuda(torch.tensor(self.hidden_size).float()))
-        alpha1 = self.atten_drop(F.softmax(e_ij1, dim=1))
-        if len(alpha1.shape) == 2:
-            alpha1 = alpha1.unsqueeze(2)
-        h_short = torch.sum(alpha1 * nodes.mailbox['user_h'], dim=1)
-        h.append(h_short)
-    elif self.item_short == 'last':
-        h.append(last_em.squeeze())
-    if len(h) == 1:
-        return {'item_h': h[0]}
-    else:
-        return {'item_h': self.agg_gate_i(torch.cat(h, -1))}
+        # Long-term interest encoding
+        if self.user_long == 'orgat':
+            e_ij = torch.sum((self.u_time_encoding(re_order) + nodes.mailbox['item_h']) * nodes.mailbox['user_h'],
+                             dim=2) \
+                   / torch.sqrt(toggle_cuda(torch.tensor(self.hidden_size).float()))
+            alpha = self.atten_drop(F.softmax(e_ij, dim=1))
+            if len(alpha.shape) == 2:
+                alpha = alpha.unsqueeze(2)
+            h_long = torch.sum(alpha * (nodes.mailbox['item_h'] + self.u_time_encoding_k(re_order)), dim=1)
+            h.append(h_long)
+        elif self.user_long == 'gru':
+            rnn_order = torch.sort(nodes.mailbox['time'], 1)[1]
+            _, hidden_i = self.gru_u(nodes.mailbox['item_h'][torch.arange(length).unsqueeze(1), rnn_order])
+            h.append(hidden_i.squeeze(0))
 
+        # Short-term interest encoding
+        last = torch.argmax(nodes.mailbox['time'], 1)
+        last_em = nodes.mailbox['item_h'][torch.arange(length), last, :].unsqueeze(1)
+        if self.user_short == 'att':
+            e_ij1 = torch.sum(last_em * nodes.mailbox['item_h'], dim=2) / torch.sqrt(
+                toggle_cuda(torch.tensor(self.hidden_size).float()))
+            alpha1 = self.atten_drop(F.softmax(e_ij1, dim=1))
+            if len(alpha1.shape) == 2:
+                alpha1 = alpha1.unsqueeze(2)
+            h_short = torch.sum(alpha1 * nodes.mailbox['item_h'], dim=1)
+            h.append(h_short)
+        elif self.user_short == 'last':
+            h.append(last_em.squeeze())
 
-def user_message_func(self, edges):
-    dic = {}
-    dic['time'] = edges.data['time']
-    dic['item_h'] = edges.src['item_h']
-    dic['user_h'] = edges.dst['user_h']
-    return dic
-
-
-def user_reduce_func(self, nodes):
-    h = []
-    # Sort by time and create the reorder index
-    order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
-    re_order = nodes.mailbox['time'].shape[1] - order - 1
-    length = nodes.mailbox['user_h'].shape[0]
-
-    # Long-term interest encoding
-    if self.user_long == 'orgat':
-        e_ij = torch.sum((self.u_time_encoding(re_order) + nodes.mailbox['item_h']) * nodes.mailbox['user_h'],
-                         dim=2) \
-               / torch.sqrt(toggle_cuda(torch.tensor(self.hidden_size).float()))
-        alpha = self.atten_drop(F.softmax(e_ij, dim=1))
-        if len(alpha.shape) == 2:
-            alpha = alpha.unsqueeze(2)
-        h_long = torch.sum(alpha * (nodes.mailbox['item_h'] + self.u_time_encoding_k(re_order)), dim=1)
-        h.append(h_long)
-    elif self.user_long == 'gru':
-        rnn_order = torch.sort(nodes.mailbox['time'], 1)[1]
-        _, hidden_i = self.gru_u(nodes.mailbox['item_h'][torch.arange(length).unsqueeze(1), rnn_order])
-        h.append(hidden_i.squeeze(0))
-
-    # Short-term interest encoding
-    last = torch.argmax(nodes.mailbox['time'], 1)
-    last_em = nodes.mailbox['item_h'][torch.arange(length), last, :].unsqueeze(1)
-    if self.user_short == 'att':
-        e_ij1 = torch.sum(last_em * nodes.mailbox['item_h'], dim=2) / torch.sqrt(
-            toggle_cuda(torch.tensor(self.hidden_size).float()))
-        alpha1 = self.atten_drop(F.softmax(e_ij1, dim=1))
-        if len(alpha1.shape) == 2:
-            alpha1 = alpha1.unsqueeze(2)
-        h_short = torch.sum(alpha1 * nodes.mailbox['item_h'], dim=1)
-        h.append(h_short)
-    elif self.user_short == 'last':
-        h.append(last_em.squeeze())
-
-    # Aggregate results using agg_gate_u if needed
-    if len(h) == 1:
-        return {'user_h': h[0]}
-    else:
-        return {'user_h': self.agg_gate_u(torch.cat(h, -1))}
+        # Aggregate results using agg_gate_u if needed
+        if len(h) == 1:
+            return {'user_h': h[0]}
+        else:
+            return {'user_h': self.agg_gate_u(torch.cat(h, -1))}
 
 
 def graph_user(bg, user_index, user_embedding):
