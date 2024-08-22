@@ -292,13 +292,11 @@ class TaggingItems(torch.nn.Module):
 
         # Get the edges where the source node is an item and find connected tags
         item_tag_edges = item_tag_g.edges(etype='as')  # Assuming edge type is 'item-tag'
-        for item in item_tag_edges:
-            item.to(self.device)
 
         # Find the tags connected to the filtered items
-        mask = torch.isin(item_tag_edges[0].to(self.device), user_item_ids.to(self.device)).to(self.device)
-        filtered_item_ids = item_tag_edges[0][mask]
-        connected_tag_ids = item_tag_edges[1][mask]
+        mask = torch.isin(item_tag_edges[0], user_item_ids)
+        filtered_item_ids = item_tag_edges[0][mask].to(self.device)
+        connected_tag_ids = item_tag_edges[1][mask].to(self.device)
 
         # Create a new subgraph with both the filtered item and tag nodes
         item_tag_g_filtered = dgl.node_subgraph(item_tag_g, {
@@ -325,6 +323,7 @@ class TaggingItems(torch.nn.Module):
 
     def forward(self, item_tag_graph, items):
         items = items.to(self.device)
+        item_tag_graph = item_tag_graph.to(self.device)
         unique_items, inverse_indices = torch.unique(items,
                                                      return_inverse=True)
         item_embed = self.item_embedding(unique_items)
