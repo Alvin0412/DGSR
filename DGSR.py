@@ -4,6 +4,7 @@
 # @Author : ZM7
 # @File : DGSR
 # @Software: PyCharm
+import datetime
 from typing import Optional, Union
 
 import dgl
@@ -107,10 +108,11 @@ class DGSR(nn.Module):
         # 2. 执行剩余的 forward 功能
         feat_dict = None
         user_layer = []
-
+        print(f"Timing test - beginning: {datetime.datetime.now()}")
         # 通过每层的 GNN 进行消息传递和 embedding 更新
         if self.layer_num > 0:
             for conv in self.layers:
+                print(f"Timing test - layer: {datetime.datetime.now()}")
                 feat_dict = conv(g, feat_dict)
                 user_layer.append(graph_user(g, user_index, feat_dict['user']))
 
@@ -119,6 +121,7 @@ class DGSR(nn.Module):
                 item_embed = graph_item(g, last_item_index, feat_dict['item'])
                 user_layer.append(item_embed)
 
+            print(f"Timing test - finish all layers: {datetime.datetime.now()}")
             # 聚合 embedding
             unified_embedding = self.unified_map(
                 toggle_cuda(torch.cat(user_layer, -1))
@@ -126,7 +129,7 @@ class DGSR(nn.Module):
 
             # 计算用户与所有 item 的得分
             score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
-
+            print(f"Timing test - finish matmul1: {datetime.datetime.now()}")
             # 返回训练阶段的结果
             if is_training:
                 return score
@@ -139,6 +142,7 @@ class DGSR(nn.Module):
 
                 # 返回前 top_k 个 item
                 _, top_k_items = torch.topk(score, k=self.top_k, dim=0)
+                print(f"Timing test - before end: {datetime.datetime.now()}")
                 return score, score_neg, top_k_items
 
     # def forward(self, g, user_index=None, last_item_index=None, neg_tar=None, is_training=False,
@@ -310,8 +314,9 @@ class DGSRLayers(nn.Module):
 
         print(f"User features are on device: {user_.device}, Item features are on device: {item_.device}")
         g.nodes['user'].data['user_h'] = self.user_weight(self.feat_drop(user_))
-
+        print(f"Timing test - in layer: {datetime.datetime.now()}")
         g = self.graph_update(g)
+        print(f"Timing test - graph upd: {datetime.datetime.now()}")
         g.nodes['user'].data['user_h'] = self.user_update_function(g.nodes['user'].data['user_h'], user_)
         g.nodes['item'].data['item_h'] = self.item_update_function(g.nodes['item'].data['item_h'], item_)
         f_dict = {'user': g.nodes['user'].data['user_h'], 'item': g.nodes['item'].data['item_h']}
