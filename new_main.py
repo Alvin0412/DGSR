@@ -123,7 +123,7 @@ def train():
     best_result = [0, 0, 0, 0, 0, 0]  # hit5,hit10,hit20,mrr5,mrr10,mrr20
     best_epoch = [0, 0, 0, 0, 0, 0]
     stop_num = 0
-
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     for epoch in range(opt.epoch):
         stop = True
         epoch_loss = 0
@@ -132,6 +132,11 @@ def train():
         model.train()
         for user, batch_graph, label, last_item in train_data:
             # print(f"user: {user}")
+            batch_graph = batch_graph.to(device)
+            user = user.to(device)
+            last_item = last_item.to(device)
+            label = label.to(device)
+
             iter += 1
             kg_graph = kg_model.tag_item_graph_constructor(
                 kg_data_retriever.kg_heterograph, batch_graph

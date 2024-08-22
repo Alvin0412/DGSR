@@ -323,6 +323,7 @@ class TaggingItems(torch.nn.Module):
     #     return final_item_embed
 
     def forward(self, item_tag_graph, items):
+        items = items.to(self.device)
         unique_items, inverse_indices = torch.unique(items,
                                                      return_inverse=True)
         item_embed = self.item_embedding(unique_items)
