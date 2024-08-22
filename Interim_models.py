@@ -288,17 +288,17 @@ class TaggingItems(torch.nn.Module):
         #
         # return item_tag_g_filtered
         # Get unique item IDs from the user-item interaction subgraph
-        user_item_ids = user_item_subg.nodes['item'].data['_ID'].unique().to(self.device)
+        user_item_ids = user_item_subg.nodes['item'].data['_ID'].unique()
 
         # Get the edges where the source node is an item and find connected tags
         item_tag_edges = item_tag_g.edges(etype='as')  # Assuming edge type is 'item-tag'
-        for item in item_tag_edges:
-            item.to(self.device)
+        # for item in item_tag_edges:
+        #     item.to(self.device)
 
         # Find the tags connected to the filtered items
-        mask = torch.isin(item_tag_edges[0].to(self.device), user_item_ids.to(self.device)).to(self.device)
-        filtered_item_ids = item_tag_edges[0].to(self.device)[mask]
-        connected_tag_ids = item_tag_edges[1].to(self.device)[mask]
+        mask = torch.isin(item_tag_edges[0], user_item_ids)
+        filtered_item_ids = item_tag_edges[0][mask]
+        connected_tag_ids = item_tag_edges[1][mask]
 
         # Create a new subgraph with both the filtered item and tag nodes
         item_tag_g_filtered = dgl.node_subgraph(item_tag_g, {
