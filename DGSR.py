@@ -70,16 +70,19 @@ class DGSR(nn.Module):
         self.require_recommendation = require_recommendation
         self.top_k = top_k
 
-        self.user_embedding = nn.Embedding(self.user_num, self.hidden_size)
-        self.item_embedding = nn.Embedding(self.item_num, self.hidden_size)
+        self.user_embedding = toggle_cuda(nn.Embedding(self.user_num, self.hidden_size))
+        self.item_embedding = toggle_cuda(nn.Embedding(self.item_num, self.hidden_size))
         if self.last_item:
-            self.unified_map = nn.Linear((self.layer_num + 1) * self.hidden_size, self.hidden_size, bias=False)
+            self.unified_map = toggle_cuda(
+                nn.Linear((self.layer_num + 1) * self.hidden_size, self.hidden_size, bias=False))
         else:
-            self.unified_map = nn.Linear(self.layer_num * self.hidden_size, self.hidden_size, bias=False)
-        self.layers = nn.ModuleList([DGSRLayers(self.hidden_size, self.hidden_size, self.user_max_length,
-                                                self.item_max_length, feat_drop, attn_drop,
-                                                self.user_long, self.user_short, self.item_long, self.item_short,
-                                                self.user_update, self.item_update) for _ in range(self.layer_num)])
+            self.unified_map = toggle_cuda(nn.Linear(self.layer_num * self.hidden_size, self.hidden_size, bias=False))
+        self.layers = nn.ModuleList([toggle_cuda(DGSRLayers(self.hidden_size, self.hidden_size, self.user_max_length,
+                                                            self.item_max_length, feat_drop, attn_drop,
+                                                            self.user_long, self.user_short, self.item_long,
+                                                            self.item_short,
+                                                            self.user_update, self.item_update)) for _ in
+                                     range(self.layer_num)])
         self.reset_parameters()
 
     def init_embeddings(self, g, tag_item_embedding: nn.Embedding = None, alpha=torch.tensor(0.25)):
@@ -115,7 +118,9 @@ class DGSR(nn.Module):
                 user_layer.append(item_embed)
 
             # 聚合 embedding
-            unified_embedding = self.unified_map(torch.cat(user_layer, -1))
+            unified_embedding = self.unified_map(
+                toggle_cuda(torch.cat(user_layer, -1))
+            )
 
             # 计算用户与所有 item 的得分
             score = torch.matmul(unified_embedding, self.item_embedding.weight.transpose(1, 0))
@@ -218,57 +223,51 @@ class DGSRLayers(nn.Module):
         self.user_max_length = user_max_length
         self.item_max_length = item_max_length
 
-        self.K = torch.tensor(K)
-        if torch.cuda.is_available():
-            self.K = self.K.cuda()
+        self.K = toggle_cuda(torch.tensor(K))
 
         if self.user_long in ['orgat', 'gcn', 'gru'] and self.user_short in ['last', 'att', 'att1']:
-            self.agg_gate_u = nn.Linear(self.hidden_size * 2, self.hidden_size, bias=False)
+            self.agg_gate_u = toggle_cuda(nn.Linear(self.hidden_size * 2, self.hidden_size, bias=False))
         if self.item_long in ['orgat', 'gcn', 'gru'] and self.item_short in ['last', 'att', 'att1']:
-            self.agg_gate_i = nn.Linear(self.hidden_size * 2, self.hidden_size, bias=False)
+            self.agg_gate_i = toggle_cuda(nn.Linear(self.hidden_size * 2, self.hidden_size, bias=False))
         if self.user_long in ['gru']:
-            self.gru_u = nn.GRU(input_size=in_feats, hidden_size=in_feats, batch_first=True)
+            self.gru_u = toggle_cuda(nn.GRU(input_size=in_feats, hidden_size=in_feats, batch_first=True))
         if self.item_long in ['gru']:
-            self.gru_i = nn.GRU(input_size=in_feats, hidden_size=in_feats, batch_first=True)
+            self.gru_i = toggle_cuda(nn.GRU(input_size=in_feats, hidden_size=in_feats, batch_first=True))
         if self.user_update_m == 'norm':
-            self.norm_user = nn.LayerNorm(self.hidden_size)
+            self.norm_user = toggle_cuda(nn.LayerNorm(self.hidden_size))
         if self.item_update_m == 'norm':
-            self.norm_item = nn.LayerNorm(self.hidden_size)
-        self.feat_drop = nn.Dropout(feat_drop)
-        self.atten_drop = nn.Dropout(attn_drop)
-        self.user_weight = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.item_weight = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+            self.norm_item = toggle_cuda(nn.LayerNorm(self.hidden_size))
+        self.feat_drop = toggle_cuda(nn.Dropout(feat_drop))
+        self.atten_drop = toggle_cuda(nn.Dropout(attn_drop))
+        self.user_weight = toggle_cuda(nn.Linear(self.hidden_size, self.hidden_size, bias=False))
+        self.item_weight = toggle_cuda(nn.Linear(self.hidden_size, self.hidden_size, bias=False))
 
         if self.user_update_m in ['concat', 'rnn']:
-            self.user_update = nn.Linear(2 * self.hidden_size, self.hidden_size, bias=False)
+            self.user_update = toggle_cuda(nn.Linear(2 * self.hidden_size, self.hidden_size, bias=False))
         if self.item_update_m in ['concat', 'rnn']:
-            self.item_update = nn.Linear(2 * self.hidden_size, self.hidden_size, bias=False)
+            self.item_update = toggle_cuda(nn.Linear(2 * self.hidden_size, self.hidden_size, bias=False))
         # attention+ attention mechanism
         if self.user_short in ['last', 'att']:
-            self.last_weight_u = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+            self.last_weight_u = toggle_cuda(nn.Linear(self.hidden_size, self.hidden_size, bias=False))
         if self.item_short in ['last', 'att']:
-            self.last_weight_i = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+            self.last_weight_i = toggle_cuda(nn.Linear(self.hidden_size, self.hidden_size, bias=False))
 
         if self.item_long in ['orgat']:
-            self.i_time_encoding = nn.Embedding(self.user_max_length, self.hidden_size)
-            self.i_time_encoding_k = nn.Embedding(self.user_max_length, self.hidden_size)
+            self.i_time_encoding = toggle_cuda(nn.Embedding(self.user_max_length, self.hidden_size))
+            self.i_time_encoding_k = toggle_cuda(nn.Embedding(self.user_max_length, self.hidden_size))
         if self.user_long in ['orgat']:
-            self.u_time_encoding = nn.Embedding(self.item_max_length, self.hidden_size)
-            self.u_time_encoding_k = nn.Embedding(self.item_max_length, self.hidden_size)
+            self.u_time_encoding = toggle_cuda(nn.Embedding(self.item_max_length, self.hidden_size))
+            self.u_time_encoding_k = toggle_cuda(nn.Embedding(self.item_max_length, self.hidden_size))
 
     def user_update_function(self, user_now, user_old):
         if self.user_update_m == 'residual':
             return F.elu(user_now + user_old)
-        elif self.user_update_m == 'gate_update':
-            pass
         elif self.user_update_m == 'concat':
             return F.elu(self.user_update(torch.cat([user_now, user_old], -1)))
-        elif self.user_update_m == 'light':
-            pass
         elif self.user_update_m == 'norm':
             return self.feat_drop(self.norm_user(user_now)) + user_old
         elif self.user_update_m == 'rnn':
-            return F.tanh(self.user_update(torch.cat([user_now, user_old], -1)))  # formula 16
+            return F.tanh(self.user_update(torch.cat([user_now, user_old], -1)))
         else:
             print('error: no user_update')
             exit()
@@ -278,8 +277,6 @@ class DGSRLayers(nn.Module):
             return F.elu(item_now + item_old)
         elif self.item_update_m == 'concat':
             return F.elu(self.item_update(torch.cat([item_now, item_old], -1)))
-        elif self.item_update_m == 'light':
-            pass
         elif self.item_update_m == 'norm':
             return self.feat_drop(self.norm_item(item_now)) + item_old
         elif self.item_update_m == 'rnn':
@@ -291,36 +288,28 @@ class DGSRLayers(nn.Module):
     def forward(self, g: dgl.DGLGraph, feat_dict=None):
         if feat_dict == None:
             if self.user_long in ['gcn']:
-                g.nodes['user'].data['norm'] = g['by'].in_degrees().unsqueeze(1)
-                if torch.cuda.is_available(): g.nodes['user'].data['norm'] = g.nodes['user'].data['norm'].cuda()
+                g.nodes['user'].data['norm'] = toggle_cuda(g['by'].in_degrees().unsqueeze(1))
             if self.item_long in ['gcn']:
-                g.nodes['item'].data['norm'] = g['by'].out_degrees().unsqueeze(1)
-                if torch.cuda.is_available(): g.edges['item'].data['norm'] = g.edges['item'].data['norm'].cuda()
+                g.nodes['item'].data['norm'] = toggle_cuda(g['by'].out_degrees().unsqueeze(1))
             user_ = g.nodes['user'].data['user_h']
             item_ = g.nodes['item'].data['item_h']
         else:
-            user_ = feat_dict['user']
-            if torch.cuda.is_available(): user_ = user_.cuda()
-            item_ = feat_dict['item']
-            if torch.cuda.is_available(): item_ = item_.cuda()
+            user_ = toggle_cuda(feat_dict['user'])
+            item_ = toggle_cuda(feat_dict['item'])
             if self.user_long in ['gcn']:
-                g.nodes['user'].data['norm'] = g['by'].in_degrees().unsqueeze(1)
-                if torch.cuda.is_available(): g.nodes['user'].data['norm'] = g.nodes['user'].data['norm'].cuda()
+                g.nodes['user'].data['norm'] = toggle_cuda(g['by'].in_degrees().unsqueeze(1))
             if self.item_long in ['gcn']:
-                g.nodes['item'].data['norm'] = g['by'].out_degrees().unsqueeze(1)
-                if torch.cuda.is_available(): g.edges['item'].data['norm'] = g.edges['item'].data['norm'].cuda()
+                g.nodes['item'].data['norm'] = toggle_cuda(g['by'].out_degrees().unsqueeze(1))
 
         g.nodes['user'].data['user_h'] = self.user_weight(self.feat_drop(user_))
 
-        g = self.graph_update(g)  # involves MPc and AGG
+        g = self.graph_update(g)
         g.nodes['user'].data['user_h'] = self.user_update_function(g.nodes['user'].data['user_h'], user_)
         g.nodes['item'].data['item_h'] = self.item_update_function(g.nodes['item'].data['item_h'], item_)
         f_dict = {'user': g.nodes['user'].data['user_h'], 'item': g.nodes['item'].data['item_h']}
         return f_dict
 
     def graph_update(self, g: dgl.DGLGraph):
-        # user_encoder 对user进行编码
-        # update all nodes
         g.multi_update_all({'by': (self.user_message_func, self.user_reduce_func),
                             'pby': (self.item_message_func, self.item_reduce_func)}, 'sum')
         return g
@@ -334,16 +323,13 @@ class DGSRLayers(nn.Module):
 
     def item_reduce_func(self, nodes):
         h = []
-        # 先根据time排序
-        # order = torch.sort(nodes.mailbox['time'], 1)[1]
         order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
         re_order = nodes.mailbox['time'].shape[1] - order - 1
         length = nodes.mailbox['item_h'].shape[0]
-        # 长期兴趣编码
         if self.item_long == 'orgat':
-            e_ij = torch.sum((self.i_time_encoding(re_order) + nodes.mailbox['user_h']) * nodes.mailbox['item_h'],
+            e_ij = torch.sum(toggle_cuda(self.i_time_encoding(re_order) + nodes.mailbox['user_h']) * nodes.mailbox['item_h'],
                              dim=2) \
-                   / torch.sqrt(torch.tensor(self.hidden_size).float())
+                   / torch.sqrt(toggle_cuda(torch.tensor(self.hidden_size).float()))
             alpha = self.atten_drop(F.softmax(e_ij, dim=1))
             if len(alpha.shape) == 2:
                 alpha = alpha.unsqueeze(2)
@@ -353,12 +339,11 @@ class DGSRLayers(nn.Module):
             rnn_order = torch.sort(nodes.mailbox['time'], 1)[1]
             _, hidden_u = self.gru_i(nodes.mailbox['user_h'][torch.arange(length).unsqueeze(1), rnn_order])
             h.append(hidden_u.squeeze(0))
-        ## 短期兴趣编码
         last = torch.argmax(nodes.mailbox['time'], 1)
         last_em = nodes.mailbox['user_h'][torch.arange(length), last, :].unsqueeze(1)
         if self.item_short == 'att':
             e_ij1 = torch.sum(last_em * nodes.mailbox['user_h'], dim=2) / torch.sqrt(
-                torch.tensor(self.hidden_size).float())
+                toggle_cuda(torch.tensor(self.hidden_size).float()))
             alpha1 = self.atten_drop(F.softmax(e_ij1, dim=1))
             if len(alpha1.shape) == 2:
                 alpha1 = alpha1.unsqueeze(2)
@@ -380,14 +365,16 @@ class DGSRLayers(nn.Module):
 
     def user_reduce_func(self, nodes):
         h = []
-        # 先根据time排序
+        # Sort by time and create the reorder index
         order = torch.argsort(torch.argsort(nodes.mailbox['time'], 1), 1)
         re_order = nodes.mailbox['time'].shape[1] - order - 1
         length = nodes.mailbox['user_h'].shape[0]
-        # 长期兴趣编码
+
+        # Long-term interest encoding
         if self.user_long == 'orgat':
             e_ij = torch.sum((self.u_time_encoding(re_order) + nodes.mailbox['item_h']) * nodes.mailbox['user_h'],
-                             dim=2) / torch.sqrt(torch.tensor(self.hidden_size).float())
+                             dim=2) \
+                   / torch.sqrt(toggle_cuda(torch.tensor(self.hidden_size).float()))
             alpha = self.atten_drop(F.softmax(e_ij, dim=1))
             if len(alpha.shape) == 2:
                 alpha = alpha.unsqueeze(2)
@@ -397,12 +384,13 @@ class DGSRLayers(nn.Module):
             rnn_order = torch.sort(nodes.mailbox['time'], 1)[1]
             _, hidden_i = self.gru_u(nodes.mailbox['item_h'][torch.arange(length).unsqueeze(1), rnn_order])
             h.append(hidden_i.squeeze(0))
-        ## 短期兴趣编码
+
+        # Short-term interest encoding
         last = torch.argmax(nodes.mailbox['time'], 1)
         last_em = nodes.mailbox['item_h'][torch.arange(length), last, :].unsqueeze(1)
         if self.user_short == 'att':
             e_ij1 = torch.sum(last_em * nodes.mailbox['item_h'], dim=2) / torch.sqrt(
-                torch.tensor(self.hidden_size).float())
+                toggle_cuda(torch.tensor(self.hidden_size).float()))
             alpha1 = self.atten_drop(F.softmax(e_ij1, dim=1))
             if len(alpha1.shape) == 2:
                 alpha1 = alpha1.unsqueeze(2)
@@ -411,6 +399,7 @@ class DGSRLayers(nn.Module):
         elif self.user_short == 'last':
             h.append(last_em.squeeze())
 
+        # Aggregate results using agg_gate_u if needed
         if len(h) == 1:
             return {'user_h': h[0]}
         else:
