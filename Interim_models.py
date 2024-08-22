@@ -279,8 +279,7 @@ class TaggingItems(torch.nn.Module):
         self.negative_slope = negative_slope
         self.reset_parameters()
 
-    @classmethod
-    def tag_item_graph_constructor(cls, item_tag_g: dgl.DGLHeteroGraph, user_item_subg: dgl.DGLHeteroGraph):
+    def tag_item_graph_constructor(self, item_tag_g: dgl.DGLHeteroGraph, user_item_subg: dgl.DGLHeteroGraph):
         """通过用户-物品交互图中的物品节点，采样物品-标签关系子图"""
         # user_item_ids = user_item_subg.nodes['item'].data['_ID'].unique()
         # item_tag_g_filtered = dgl.node_subgraph(item_tag_g, {
@@ -289,21 +288,21 @@ class TaggingItems(torch.nn.Module):
         #
         # return item_tag_g_filtered
         # Get unique item IDs from the user-item interaction subgraph
-        user_item_ids = user_item_subg.nodes['item'].data['_ID'].unique()
+        user_item_ids = user_item_subg.nodes['item'].data['_ID'].unique().to(self.device)
 
         # Get the edges where the source node is an item and find connected tags
-        item_tag_edges = item_tag_g.edges(etype='as')  # Assuming edge type is 'item-tag'
+        item_tag_edges = item_tag_g.edges(etype='as').to(self.device)  # Assuming edge type is 'item-tag'
 
         # Find the tags connected to the filtered items
-        mask = torch.isin(item_tag_edges[0], user_item_ids)
-        filtered_item_ids = item_tag_edges[0][mask]
-        connected_tag_ids = item_tag_edges[1][mask]
+        mask = torch.isin(item_tag_edges[0], user_item_ids).to(self.device)
+        filtered_item_ids = item_tag_edges[0][mask].to(self.device)
+        connected_tag_ids = item_tag_edges[1][mask].to(self.device)
 
         # Create a new subgraph with both the filtered item and tag nodes
         item_tag_g_filtered = dgl.node_subgraph(item_tag_g, {
             'item': filtered_item_ids.unique(),
             'tag': connected_tag_ids.unique()
-        })
+        }).to(self.device)
 
         return item_tag_g_filtered
 
