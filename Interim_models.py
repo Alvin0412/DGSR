@@ -297,8 +297,8 @@ class TaggingItems(torch.nn.Module):
 
         # Find the tags connected to the filtered items
         mask = torch.isin(item_tag_edges[0].to(self.device), user_item_ids.to(self.device)).to(self.device)
-        filtered_item_ids = item_tag_edges[0][mask].to(self.device)
-        connected_tag_ids = item_tag_edges[1][mask].to(self.device)
+        filtered_item_ids = item_tag_edges[0][mask]
+        connected_tag_ids = item_tag_edges[1][mask]
 
         # Create a new subgraph with both the filtered item and tag nodes
         item_tag_g_filtered = dgl.node_subgraph(item_tag_g, {
