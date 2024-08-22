@@ -291,7 +291,7 @@ class TaggingItems(torch.nn.Module):
         user_item_ids = user_item_subg.nodes['item'].data['_ID'].unique().to(self.device)
 
         # Get the edges where the source node is an item and find connected tags
-        item_tag_edges = item_tag_g.edges(etype='as').to(self.device)  # Assuming edge type is 'item-tag'
+        item_tag_edges = item_tag_g.edges(etype='as')  # Assuming edge type is 'item-tag'
 
         # Find the tags connected to the filtered items
         mask = torch.isin(item_tag_edges[0], user_item_ids).to(self.device)
