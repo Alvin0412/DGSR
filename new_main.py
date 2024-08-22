@@ -156,9 +156,10 @@ def train():
             optimizer.zero_grad()
             kg_optimizer.zero_grad()
             print(f"backprop - start {datetime.datetime.now()}")
-            with torch.autograd.profiler.profile(use_cuda=True) as prof:
-                loss.backward()
-            print(prof.key_averages().table(sort_by="cuda_time_total"))
+            # with torch.autograd.profiler.profile(use_cuda=True) as prof:
+            #     loss.backward()
+            loss.backward()
+            # print(prof.key_averages().table(sort_by="cuda_time_total"))
             print(f"backprop - end {datetime.datetime.now()}")
             optimizer.step()
             kg_optimizer.step()

@@ -227,7 +227,7 @@ class TaggingItems(torch.nn.Module):
     """
 
     def __init__(self, item_num, tag_vocab: dict,
-                 num_gnn_layers=4, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=300,
+                 num_gnn_layers=2, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=300,
                  word2vec_model_path: pathlib.Path | None = pathlib.Path(
                      __file__).parent / "pretrained" / "GoogleNews-vectors-negative300.bin"):
         super(TaggingItems, self).__init__()
@@ -261,7 +261,7 @@ class TaggingItems(torch.nn.Module):
                     'as': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm").to(device),
                     'ras': SAGEConv(hidden_size, hidden_size, aggregator_type="lstm").to(device),
                 },
-                aggregate='sum'
+                aggregate='mean'
             ).to(device)
             self.gnn_layers.append(conv_layer)
 
