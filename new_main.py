@@ -135,6 +135,9 @@ def train(opt):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     epoch_loss = 0
     test_loss = 0
+    patience = opt.patience  # 设置早停的耐心值
+    best_test_loss = float('inf')  # 追踪验证集上的最佳loss
+    epochs_no_improve = 0  # 未提升的epoch计数器
     for epoch in range(opt.epoch):
         stop = True
         epoch_loss = 0
@@ -222,6 +225,17 @@ def train(opt):
                 if iter % 100 == 0:
                     print('Iter {}, test_loss {:.4f}'.format(iter, np.mean(all_loss)), datetime.datetime.now())
             recall5, recall10, recall20, ndgg5, ndgg10, ndgg20 = eval_metric(all_top)
+            mean_test_loss = np.mean(all_loss)
+            if mean_test_loss < best_test_loss:
+                best_test_loss = mean_test_loss
+                epochs_no_improve = 0  # 如果测试集损失下降，重置计数器
+                stop = False
+            else:
+                epochs_no_improve += 1
+                print(f'Epochs without improvement: {epochs_no_improve}')
+                if epochs_no_improve >= patience:
+                    print(f'Early stopping at epoch {epoch} due to no improvement in test loss.')
+                    break
             if recall5 > best_result[0]:
                 best_result[0] = recall5
                 best_epoch[0] = epoch
@@ -334,7 +348,7 @@ def main_logic(opt, tuning=False):
         objective = functools.partial(bayesian_objective, base_opt=opt)
         name = f"hyperparameter_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
         study = optuna.create_study(direction='minimize', study_name=name)
-        study.optimize(objective, n_trials=50)
+        study.optimize(objective, n_trials=25)
     else:
         train(opt)
 
