@@ -225,17 +225,20 @@ def train(opt):
                 if iter % 100 == 0:
                     print('Iter {}, test_loss {:.4f}'.format(iter, np.mean(all_loss)), datetime.datetime.now())
             recall5, recall10, recall20, ndgg5, ndgg10, ndgg20 = eval_metric(all_top)
-            mean_test_loss = np.mean(all_loss)
-            if mean_test_loss < best_test_loss:
-                best_test_loss = mean_test_loss
-                epochs_no_improve = 0  # 如果测试集损失下降，重置计数器
-                stop = False
-            else:
-                epochs_no_improve += 1
-                print(f'Epochs without improvement: {epochs_no_improve}')
-                if epochs_no_improve >= patience:
-                    print(f'Early stopping at epoch {epoch} due to no improvement in test loss.')
-                    break
+            try:
+                mean_test_loss = np.mean(all_loss)
+                if mean_test_loss < best_test_loss:
+                    best_test_loss = mean_test_loss
+                    epochs_no_improve = 0  # 如果测试集损失下降，重置计数器
+                    stop = False
+                else:
+                    epochs_no_improve += 1
+                    print(f'Epochs without improvement: {epochs_no_improve}')
+                    if epochs_no_improve >= patience:
+                        print(f'Early stopping at epoch {epoch} due to no improvement in test loss.')
+                        break
+            except Exception as e:
+                print(f"Early stop mechanism went wrong because of {e}")
             if recall5 > best_result[0]:
                 best_result[0] = recall5
                 best_epoch[0] = epoch
