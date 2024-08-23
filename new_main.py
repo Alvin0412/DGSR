@@ -134,6 +134,7 @@ def train(opt):
     stop_num = 0
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     epoch_loss = 0
+    test_loss = 0
     for epoch in range(opt.epoch):
         stop = True
         epoch_loss = 0
@@ -268,7 +269,7 @@ def train(opt):
     #     "NDGG@10": best_result[4],
     #     "NDGG@20": best_result[5],
     # }
-    return epoch_loss
+    return (epoch_loss+test_loss) / 2
 
 
 def save_hyperparameters(trial: optuna.Trial, opt, filename, loss=None):
