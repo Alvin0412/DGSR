@@ -39,7 +39,7 @@ def init_parser():
     parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')  # 不用调整
 
     parser.add_argument('--gpu', default='0')
-    parser.add_argument('--patience', default='1') # 没啥耐心
+    parser.add_argument('--patience', default=1) # 没啥耐心
     parser.add_argument('--last_item', action='store_true', help='aggreate last item')
     parser.add_argument("--record", action='store_true', default=True, help='record experimental results')
     parser.add_argument("--val", action='store_true', default=False)
