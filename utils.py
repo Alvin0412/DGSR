@@ -36,7 +36,7 @@ def neg_generate(user, data_neg, neg_num=100):
 
 class myFloder(Dataset):
     def __init__(self, root_dir, loader):
-        print(f"#{id(self)}: ok")
+        # print(f"#{id(self)}: ok")
         self.root = root_dir
         self.loader = loader
         self.dir_list = load_data(root_dir)
@@ -71,7 +71,7 @@ def load_data(data_path):
     dir_list.sort()
     for filename in dir_list:
         for fil in os.listdir(os.path.join(data_path, filename)):
-            print(fil)
+            # print(fil)
             data_dir.append(os.path.join(os.path.join(data_path, filename), fil))
     return data_dir
 

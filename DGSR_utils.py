@@ -9,35 +9,41 @@ import numpy as np
 import argparse
 import sys
 
+
 def init_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data', default='Games', help='data name: Games')
-    parser.add_argument('--batchSize', type=int, default=256, help='input batch size')
-    parser.add_argument('--hidden_size', type=int, default=128, help='hidden state size')
-    # parser.add_argument('--hidden_size', type=int, default=300, help='hidden state size')
+
+
     parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--l2', type=float, default=0.0005, help='l2 penalty')
-    parser.add_argument('--user_update', default='rnn')
-    parser.add_argument('--item_update', default='rnn')
-    parser.add_argument('--user_long', default='orgat')
-    parser.add_argument('--item_long', default='orgat')
-    parser.add_argument('--user_short', default='att')
-    parser.add_argument('--item_short', default='att')
+    parser.add_argument('--tag_num_gnn_layers', default=2, help="Number of tag generating model layers")
+    parser.add_argument('--tag_negative_slope', default=0.01, help='negative slope for leaky ReLU')
     parser.add_argument('--feat_drop', type=float, default=0.3, help='drop_out')
     parser.add_argument('--attn_drop', type=float, default=0.3, help='drop_out')
     parser.add_argument('--layer_num', type=int, default=3, help='GNN layer')
-    parser.add_argument('--item_max_length', type=int, default=50, help='the max length of item sequence')
-    parser.add_argument('--user_max_length', type=int, default=50, help='the max length of use sequence')
-    parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')
+    """Above are the parameters that need to be tuned"""
+
+    parser.add_argument('--data', default='Movies', help='data name')
+    parser.add_argument('--batchSize', type=int, default=256, help='input batch size')  # 不需要调整
+    parser.add_argument('--hidden_size', type=int, default=128, help='hidden state size')  # 不需要调整
+    # parser.add_argument('--hidden_size', type=int, default=300, help='hidden state size')
+    parser.add_argument('--user_update', default='rnn')  # 不需要调整
+    parser.add_argument('--item_update', default='rnn')  # 不需要调整
+    parser.add_argument('--user_long', default='orgat')  # 不用调整
+    parser.add_argument('--item_long', default='orgat')  # 不用调整
+    parser.add_argument('--user_short', default='att')  # 不用调整
+    parser.add_argument('--item_short', default='att')  # 不用调整
+    parser.add_argument('--item_max_length', type=int, default=50, help='the max length of item sequence')  # 不用调整
+    parser.add_argument('--user_max_length', type=int, default=50, help='the max length of use sequence')  # 不用调整
+    parser.add_argument('--k_hop', type=int, default=2, help='sub-graph size')  # 不用调整
+
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--last_item', action='store_true', help='aggreate last item')
     parser.add_argument("--record", action='store_true', default=True, help='record experimental results')
     parser.add_argument("--val", action='store_true', default=False)
     parser.add_argument("--model_record", action='store_true', default=True, help='record model')
     return parser
-
-
 
 
 def eval_metric(all_top, random_rank=True):
@@ -83,6 +89,7 @@ class Logger(object):
     这个类的目的是尽可能不改变原始代码的情况下, 使得程序的输出同时打印在控制台和保存在文件中
     用法: 只需在程序中加入一行 `sys.stdout = Logger(log_file_path)` 即可
     """
+
     def __init__(self, file_path):
         self.terminal = sys.stdout
         self.log = open(file_path, "a")
@@ -93,7 +100,7 @@ class Logger(object):
         self.log.flush()
 
     def flush(self):
-        #this flush method is needed for python 3 compatibility.
-        #this handles the flush command by doing nothing.
-        #you might want to specify some extra behavior here.
+        # this flush method is needed for python 3 compatibility.
+        # this handles the flush command by doing nothing.
+        # you might want to specify some extra behavior here.
         pass

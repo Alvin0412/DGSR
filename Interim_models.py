@@ -231,7 +231,7 @@ class TaggingItems(torch.nn.Module):
     """
 
     def __init__(self, item_num, tag_vocab: dict,
-                 num_gnn_layers=2, feat_drop=0.2, attn_drop=0.2, negative_slope=0.01, hidden_size=128,
+                 tag_num_gnn_layers=2, feat_drop=0.2, attn_drop=0.2, tag_negative_slope=0.01, hidden_size=128,
                  word2vec_model_path: pathlib.Path | None = pathlib.Path(
                      __file__).parent / "pretrained" / "GoogleNews-vectors-negative300.bin"):
         super(TaggingItems, self).__init__()
@@ -260,7 +260,7 @@ class TaggingItems(torch.nn.Module):
         #     [SAGEConv(hidden_size, hidden_size, aggregator_type="lstm") for _ in range(num_gnn_layers)])
 
         self.gnn_layers = nn.ModuleList().to(device)
-        for _ in range(num_gnn_layers):
+        for _ in range(tag_num_gnn_layers):
             conv_layer = HeteroGraphConv(
                 {
                     'as': SAGEConv(hidden_size, hidden_size, aggregator_type="mean").to(device),
@@ -270,18 +270,18 @@ class TaggingItems(torch.nn.Module):
             ).to(device)
             self.gnn_layers.append(conv_layer)
 
-        self.norm_layers = nn.ModuleList([nn.LayerNorm(hidden_size).to(device) for _ in range(num_gnn_layers)])
+        self.norm_layers = nn.ModuleList([nn.LayerNorm(hidden_size).to(device) for _ in range(tag_num_gnn_layers)])
 
         # 其他相关参数
         self.feat_drop = nn.Dropout(feat_drop).to(device)
-        self.attn_drop = nn.Dropout(attn_drop).to(device)
+        # self.attn_drop = nn.Dropout(attn_drop).to(device)
 
         self.final = nn.Sequential(
             nn.Linear(self.hidden_size, self.n_output, bias=False),
-            nn.LeakyReLU(negative_slope)
+            nn.LeakyReLU(tag_negative_slope)
         ).to(device)
 
-        self.negative_slope = negative_slope
+        self.negative_slope = tag_negative_slope
         self.reset_parameters()
 
     def tag_item_graph_constructor(self, item_tag_g: dgl.DGLHeteroGraph, user_item_subg: dgl.DGLHeteroGraph):
