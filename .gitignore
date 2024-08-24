@@ -18,7 +18,5 @@ debug_purpose.py
 
 /logs/
 
-/results
-
 /Buffer/*.py
 /Buffer/*.csv
