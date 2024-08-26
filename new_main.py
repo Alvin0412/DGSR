@@ -245,9 +245,13 @@ def train(opt):
                 stop = False
             if recall10 > best_result[1]:
                 if opt.model_record:
-                    save_dir = pathlib.Path('save_models/')
+                    # save_dir = pathlib.Path('save_models/')
+                    # save_dir.mkdir(parents=True, exist_ok=True)
+                    # torch.save(model.state_dict(), save_dir / f'{model_file}.pkl')
+                    save_dir = pathlib.Path('save_models/') / f'{model_file}'
                     save_dir.mkdir(parents=True, exist_ok=True)
-                    torch.save(model.state_dict(), save_dir / f'{model_file}.pkl')
+                    torch.save(model.state_dict(), save_dir / f'DGSR_param.pkl')
+                    torch.save(kg_model.state_dict(), save_dir / f'tagging.pkl')
                 best_result[1] = recall10
                 best_epoch[1] = epoch
                 stop = False
@@ -286,7 +290,7 @@ def train(opt):
     #     "NDGG@10": best_result[4],
     #     "NDGG@20": best_result[5],
     # }
-    return (epoch_loss+test_loss) / 2
+    return (epoch_loss + test_loss) / 2
 
 
 def save_hyperparameters(trial: optuna.Trial, opt, filename, loss=None):
@@ -354,6 +358,10 @@ def main_logic(opt, tuning=False):
         study.optimize(objective, n_trials=25)
     else:
         train(opt)
+
+
+def experiment(opt):
+    """Load model parameters and """
 
 
 if __name__ == '__main__':

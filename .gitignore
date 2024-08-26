@@ -20,3 +20,8 @@ debug_purpose.py
 
 /Buffer/*.py
 /Buffer/*.csv
+
+/save_models/*.pkl
+/results/*.py
+/results/*
+/results/*.json

@@ -13,14 +13,13 @@ import sys
 def init_parser():
     parser = argparse.ArgumentParser()
 
-
     parser.add_argument('--epoch', type=int, default=10, help='number of epochs to train for')
-    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--l2', type=float, default=0.0005, help='l2 penalty')
-    parser.add_argument('--tag_num_gnn_layers', default=2, help="Number of tag generating model layers")
-    parser.add_argument('--tag_negative_slope', default=0.01, help='negative slope for leaky ReLU')
-    parser.add_argument('--feat_drop', type=float, default=0.3, help='drop_out')
-    parser.add_argument('--attn_drop', type=float, default=0.3, help='drop_out')
+    parser.add_argument('--lr', type=float, default=1.803842e-03, help='learning rate')
+    parser.add_argument('--l2', type=float, default=2.185919e-04, help='l2 penalty')
+    parser.add_argument('--tag_num_gnn_layers', default=5, help="Number of tag generating model layers")
+    parser.add_argument('--tag_negative_slope', default=7.413910e-02, help='negative slope for leaky ReLU')
+    parser.add_argument('--feat_drop', type=float, default=2.282316e-01, help='drop_out')
+    parser.add_argument('--attn_drop', type=float, default=2.404539e-01, help='drop_out')
     parser.add_argument('--layer_num', type=int, default=3, help='GNN layer')
     """Above are the parameters that need to be tuned"""
 
